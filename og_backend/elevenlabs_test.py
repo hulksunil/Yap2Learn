@@ -11,11 +11,17 @@ load_dotenv("keys.env")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 VOICE_ID = os.getenv("VOICE_ID")
 
-# model 2
+# speech to text model 2
 # eleven_multilingual_v2
 
-# model 3
+# speech to text model 3
 # eleven_v3
+
+# text to speech model 1
+# scribe_v1
+
+# text to speech model 2
+# scribe_v2
 
 elevenlabs = ElevenLabs(
   api_key=ELEVENLABS_API_KEY
@@ -59,14 +65,22 @@ def transcribe(file_path: str):
     return transcription
 
 if __name__ == "__main__":
+    conversation_text = ""
+    try:
+        with open("conversation.txt", "r", encoding="utf-8") as f:
+            conversation_text = f.read()
+        print(f"Loaded {len(conversation_text)} characters from conversation.txt")
+    except FileNotFoundError:
+        print("Warning: conversation.txt not found.")
+
     action = input("Choose action: (1) TTS Test (2) Record & Transcribe: ")
     
     if action == "1":
         text_to_say_2 = "In French, especially in Quebec, “je veux” sounds a bit direct when ordering. A more polite and natural option is: \"Je voudrais un latte moyen.\""
         text_to_say = "yap2learn. Learning to yap."
         output_file = "test_audio.mp3"
-        print(f"Generating audio for: '{text_to_say_2}'")
-        audio = speak(text_to_say_2, output_filename=output_file)
+        print(f"Generating audio for: '{conversation_text}'")
+        audio = speak(conversation_text, output_filename=output_file)
         play(audio)
         
         # Transcribe the TTS output
@@ -86,4 +100,5 @@ if __name__ == "__main__":
             
     else:
         print("Invalid selection.")
+
 
