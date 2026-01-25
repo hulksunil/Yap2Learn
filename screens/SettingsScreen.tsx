@@ -97,9 +97,24 @@ export default function SettingsScreen() {
 
                 <Text style={styles.sectionHeader}>About</Text>
                 <View style={styles.card}>
-                    <Text style={styles.infoText}>Yap2Learn v1.0.0</Text>
                     <Text style={styles.infoTextSub}>Designed for Hackathon Project.</Text>
                 </View>
+
+                {/* Cloud Sync Section */}
+                <Text style={styles.sectionHeader}>Cloud Sync</Text>
+                <TouchableOpacity
+                    style={styles.syncBtn}
+                    onPress={async () => {
+                        const { MongoService } = await import('../services/api/mongo');
+                        alert('Starting sync... please wait.');
+                        const count = await MongoService.syncHistory();
+                        alert(`Sync Complete! Uploaded ${count} sessions.`);
+                    }}
+                >
+                    <Save size={20} color="#FFF" />
+                    <Text style={styles.syncBtnText}>Sync History to Cloud</Text>
+                </TouchableOpacity>
+                <Text style={styles.helperText}>Uploads your past sessions to enable Semantic Flashcards.</Text>
 
             </ScrollView>
         </SafeAreaView>
@@ -195,5 +210,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Theme.colors.textSecondary,
         marginTop: 4,
+    },
+    syncBtn: {
+        backgroundColor: Theme.colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 8,
+        gap: 8,
+    },
+    syncBtnText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 16,
     }
 });

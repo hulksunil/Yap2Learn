@@ -296,9 +296,12 @@ export default function ConversationScreen() {
                     <Text style={styles.headerTitle}>{scenarioTitle}</Text>
                     <Text style={styles.headerSubtitle}>{targetLanguage.toUpperCase()} • {level.toUpperCase()}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setModalVisible(true)}>
-                    <MoreVertical size={24} color={Theme.colors.text} />
-                </TouchableOpacity>
+                {!isReadOnly && (
+                    <TouchableOpacity onPress={() => setModalVisible(true)}>
+                        <MoreVertical size={24} color={Theme.colors.text} />
+                    </TouchableOpacity>
+                )}
+                {isReadOnly && <View style={{ width: 24 }} />}
             </View>
 
             {/* Transcript */}

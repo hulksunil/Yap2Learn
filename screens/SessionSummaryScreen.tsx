@@ -8,6 +8,7 @@ import { StorageService } from '../services/storage';
 import { SavedPhraseCard, CorrectionCard } from '../components/SummaryComponents';
 import { TTSService } from '../services/api/tts';
 import { Audio } from 'expo-av';
+import { MongoService } from '../services/api/mongo';
 
 export default function SessionSummaryScreen() {
     const router = useRouter();
@@ -39,6 +40,13 @@ export default function SessionSummaryScreen() {
             if (sound) sound.unloadAsync();
         };
     }, [sound]);
+
+    // Trigger Sync when session is loaded
+    useEffect(() => {
+        if (session && session.id) {
+            MongoService.syncSession(session.id);
+        }
+    }, [session]);
 
     const loadSession = async () => {
         const history = await StorageService.getHistory();
