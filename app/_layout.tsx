@@ -20,7 +20,9 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="start-session" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="conversation" options={{ headerShown: false }} />
         <Stack.Screen name="session-summary" options={{ headerShown: false }} />
         <Stack.Screen name="flashcards" options={{ headerShown: false }} />

@@ -6,9 +6,10 @@ interface ChatBubbleProps {
     text: string;
     sender: 'user' | 'assistant';
     avatar?: any; // Placeholder for image source
+    translation?: string;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ text, sender, avatar }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ text, sender, avatar, translation }) => {
     const isUser = sender === 'user';
 
     return (
@@ -32,6 +33,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ text, sender, avatar }) 
                 ]}>
                     {text}
                 </Text>
+                {/* Translation for All Messages */}
+                {translation && (
+                    <Text style={styles.translationText}>
+                        {translation}
+                    </Text>
+                )}
             </View>
             {isUser && avatar && (
                 <View style={styles.avatarContainer}>
@@ -91,5 +98,14 @@ const styles = StyleSheet.create({
     },
     textAssistant: {
         color: Theme.colors.text,
+    },
+    translationText: {
+        fontSize: 14,
+        color: Theme.colors.textSecondary,
+        fontStyle: 'italic',
+        marginTop: 4,
+        paddingTop: 4,
+        borderTopWidth: 0.5,
+        borderTopColor: '#E5E7EB',
     },
 });

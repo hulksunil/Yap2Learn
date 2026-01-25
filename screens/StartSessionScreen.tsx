@@ -8,15 +8,15 @@ import { X, MessageSquare, Coffee, Briefcase, ArrowRight, MoreVertical } from 'l
 
 export default function StartSessionScreen() {
     const router = useRouter();
-    const { setConfig, resetSession } = useSessionStore();
-    const [language, setLanguage] = useState<'English' | 'French'>('French');
+    const { setSessionConfig, resetSession, targetLanguage } = useSessionStore();
+    // Local state only for level and scenario now
     const [level, setLevel] = useState('Intermediate');
     const [selectedScenario, setSelectedScenario] = useState('cafe');
     const [showMenu, setShowMenu] = useState(false);
 
     const handleStart = () => {
         resetSession();
-        setConfig(language, level, selectedScenario);
+        setSessionConfig(level, selectedScenario); // Updated store method
         router.push('/conversation');
     };
 
@@ -41,6 +41,16 @@ export default function StartSessionScreen() {
                             style={styles.menuItem}
                             onPress={() => {
                                 setShowMenu(false);
+                                router.push('/settings');
+                            }}
+                        >
+                            <Text style={styles.menuText}>Settings</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                setShowMenu(false);
                                 router.push('/history');
                             }}
                         >
@@ -61,22 +71,18 @@ export default function StartSessionScreen() {
             }
 
             <ScrollView contentContainerStyle={styles.content}>
-                {/* Language Section */}
-                <Text style={styles.sectionLabel}>Language</Text>
-                <View style={styles.segmentContainer}>
-                    <TouchableOpacity
-                        style={[styles.segmentBtn, language === 'English' && styles.segmentBtnActive]}
-                        onPress={() => setLanguage('English')}
-                    >
-                        <Text style={[styles.segmentText, language === 'English' && styles.segmentTextActive]}>English</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.segmentBtn, language === 'French' && styles.segmentBtnActive]}
-                        onPress={() => setLanguage('French')}
-                    >
-                        <Text style={[styles.segmentText, language === 'French' && styles.segmentTextActive]}>French</Text>
-                    </TouchableOpacity>
-                </View>
+                {/* Language (Learning) Section */}
+                <Text style={styles.sectionLabel}>I want to practice...</Text>
+                <TouchableOpacity
+                    style={styles.languageDisplay}
+                    onPress={() => router.push('/settings')} // Shortcut to settings/language
+                >
+                    <Text style={styles.languageDisplayText}>{targetLanguage}</Text>
+                    {/* Reusing Search icon or just Edit/Arrow */}
+                    <View style={styles.editIcon}>
+                        <MoreVertical size={16} color={Theme.colors.primary} style={{ transform: [{ rotate: '90deg' }] }} />
+                    </View>
+                </TouchableOpacity>
 
                 {/* Level Section */}
                 <Text style={styles.sectionLabel}>Level</Text>
@@ -194,11 +200,36 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     segmentText: {
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '500',
         color: Theme.colors.textSecondary,
     },
     segmentTextActive: {
         color: Theme.colors.primary,
+        fontWeight: '600',
+    },
+    languageDisplay: {
+        backgroundColor: '#FFF',
+        padding: 16,
+        borderRadius: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    languageDisplayText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: Theme.colors.primary,
+    },
+    editIcon: {
+        backgroundColor: '#EFF6FF',
+        padding: 8,
+        borderRadius: 8,
     },
     scenarioCard: {
         flexDirection: 'row',
