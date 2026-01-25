@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
 import { ArrowLeft, MoreVertical, Keyboard, Lightbulb, AudioWaveform as Waveform, X } from 'lucide-react-native';
@@ -23,13 +23,19 @@ export default function ConversationScreen() {
     const scrollViewRef = useRef<ScrollView>(null);
     const [sound, setSound] = useState<Audio.Sound>();
 
+    // Audio Playback State
+    const [playingText, setPlayingText] = useState<string | null>(null);
+    const [loadingText, setLoadingText] = useState<string | null>(null);
+    const [isGeneratingRecap, setIsGeneratingRecap] = useState(false);
+
     const {
         transcript,
         status,
         scenario,
         level,
         setStatus,
-        addMessage
+        addMessage,
+        setTranscript
     } = useSessionStore();
 
     // Basic Sound Cleanup
@@ -41,12 +47,10 @@ export default function ConversationScreen() {
         };
     }, [sound]);
 
-    // Initial Greeting
-    useEffect(() => {
-        if (transcript.length === 0) {
-            initSession();
-        }
-    }, []);
+
+
+    const { sessionId, readOnly } = useLocalSearchParams();
+    const isReadOnly = readOnly === 'true';
 
     // Auto-scroll on new message
     useEffect(() => {
@@ -54,6 +58,27 @@ export default function ConversationScreen() {
             scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
     }, [transcript, status]);
+
+    useEffect(() => {
+        if (isReadOnly && sessionId) {
+            loadReadOnlySession();
+        } else if (transcript.length === 0) {
+            initSession();
+        }
+    }, [isReadOnly, sessionId]);
+
+    const loadReadOnlySession = async () => {
+        setStatus('processing');
+        // Find session in history
+        const history = await StorageService.getHistory();
+        const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+        const session = history.find(s => s.id === sid);
+
+        if (session && session.transcript) {
+            setTranscript(session.transcript);
+        }
+        setStatus('idle');
+    };
 
     const initSession = async () => {
         setStatus('processing');
@@ -84,6 +109,42 @@ export default function ConversationScreen() {
         const { sound: newSound } = await Audio.Sound.createAsync({ uri });
         setSound(newSound);
         await newSound.playAsync();
+    };
+
+    const playText = async (text: string) => {
+        if (loadingText) return;
+        if (playingText === text && sound) {
+            await sound.stopAsync();
+            setPlayingText(null);
+            return;
+        }
+
+        // Stop previous
+        if (sound) {
+            await sound.unloadAsync();
+            setSound(undefined);
+            setPlayingText(null);
+        }
+
+        try {
+            setLoadingText(text);
+            const uri = await TTSService.generateAudio(text);
+            if (uri) {
+                const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+                newSound.setOnPlaybackStatusUpdate((status) => {
+                    if (status.isLoaded && status.didJustFinish) {
+                        setPlayingText(null);
+                        setSound(undefined);
+                    }
+                });
+                setSound(newSound);
+                setPlayingText(text);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingText(null);
+        }
     };
 
     const handleMicPress = async () => {
@@ -125,33 +186,8 @@ export default function ConversationScreen() {
                 return;
             }
 
-            // Add User Message with Feedback if exists
-            // Note: Ideally we update the previous message, but for now we re-add/update logic
-            // A bit of a hack: we just update the store's last message if needed,
-            // but for simplicity let's assume we handle it by display.
-            // Since actions are simple, we will just proceed.
-
             if (aiResponse.feedback) {
-                // We could update the user message here if we had an update action
-                // For now, let's just append the feedback to the next AI message or similar?
-                // Or better, let's allow adding feedback to the user message we just sent.
-                // TODO: Add 'updateMessage' to store. For now, we attach it to the AI message or ignore.
-                // Actually, the Store has `addMessage`. Let's just pretend we attach it retroactive
-                // or let's simplify: Display feedback as a separate item or attached to AI?
-                // The UI expects feedback on the USER message.
-                // Let's implement a quick fix:
-                // We'll define feedback on the user message.
-                // But we already added it! We need to update it.
-                // SKIPPING update for now to keep it simple, or we wait for LLM before adding user message?
-                // --> Better UX: Show User text immediately (optimistic) or wait? STT is fast enough.
-                // Let's Add User Message AFTER LLM for this demo to ensure feedback is attached?
-                // No, that feels slow.
-                // Re-implementation: Add user message first (no feedback). Then update it?
-                // Since we don't have update logic, I will just proceed without displaying feedback on the bubbles for this step
-                // OR I will wait for LLM to return before adding the User Message to the store.
-                // It's a slightly longer "Processing" wait, but ensures data consistency.
-
-                // RETRYING: Logic - data consistency first.
+                // Feedback usage if implemented
             }
 
             addMessage({
@@ -228,7 +264,9 @@ export default function ConversationScreen() {
                                     original={msg.feedback.original}
                                     improved={msg.feedback.improved}
                                     explanation={msg.feedback.explanation}
-                                    onRetry={() => { }}
+                                    onPlay={() => playText(msg.feedback!.improved)}
+                                    isPlaying={playingText === msg.feedback!.improved}
+                                    isLoading={loadingText === msg.feedback!.improved}
                                 />
                             </View>
                         )}
@@ -242,28 +280,42 @@ export default function ConversationScreen() {
                 <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Footer Controls */}
-            <View style={styles.footer}>
-                <TouchableOpacity style={styles.iconBtn}>
-                    <Lightbulb size={24} color={Theme.colors.textSecondary} />
-                </TouchableOpacity>
+            {/* Footer Controls - Hide if Read Only */}
+            {!isReadOnly && (
+                <View style={styles.footer}>
+                    <TouchableOpacity style={styles.iconBtn}>
+                        <Lightbulb size={24} color={Theme.colors.textSecondary} />
+                    </TouchableOpacity>
 
-                <PulseButton
-                    state={status}
-                    onPress={handleMicPress}
-                />
+                    <PulseButton
+                        state={status}
+                        onPress={handleMicPress}
+                    />
 
-                <TouchableOpacity style={styles.iconBtn}>
-                    <Keyboard size={24} color={Theme.colors.textSecondary} />
-                </TouchableOpacity>
-            </View>
+                    <TouchableOpacity style={styles.iconBtn}>
+                        <Keyboard size={24} color={Theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Read Only Footer Alt */}
+            {isReadOnly && (
+                <View style={styles.footer}>
+                    <TouchableOpacity
+                        style={[styles.modalEndBtn, { backgroundColor: Theme.colors.primary, borderRadius: 30 }]}
+                        onPress={() => router.push({ pathname: '/session-summary', params: { sessionId } })}
+                    >
+                        <Text style={styles.modalEndText}>View Summary</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             {/* End Session Modal */}
             <Modal
                 animationType="fade"
                 transparent={true}
                 visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
+                onRequestClose={() => !isGeneratingRecap && setModalVisible(false)}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
@@ -280,33 +332,49 @@ export default function ConversationScreen() {
                         <TouchableOpacity
                             style={styles.modalEndBtn}
                             onPress={async () => {
-                                // Save Session
+                                setModalVisible(false); // Close dropdown logic immediate UX
+                                setIsGeneratingRecap(true); // Trigger Overlay
+
+                                // 1. Generate Recap
+                                const recap = await LLMService.generateSessionRecap(transcript);
+
+                                // Default fallback (must be defined locally!)
+                                const finalRecap = recap || {
+                                    saved_phrases: [],
+                                    top_corrections: [],
+                                    suggestions: []
+                                };
+
+                                // 2. Save Session with Recap
+                                const curSessionId = Date.now().toString();
                                 await StorageService.saveSession({
-                                    id: Date.now().toString(),
+                                    id: curSessionId,
                                     date: new Date().toISOString(),
                                     scenario: scenario,
-                                    language: 'French', // TODO: Get from store
+                                    language: 'French',
                                     level: level,
-                                    turnsCount: transcript.length
+                                    turnsCount: transcript.length,
+                                    transcript: transcript,
+                                    recap: finalRecap
                                 });
 
-                                // Extract and Save Flashcards
-                                const newCards = transcript
-                                    .filter(msg => msg.feedback)
-                                    .map(msg => ({
-                                        id: Date.now().toString() + Math.random(),
-                                        front: msg.feedback!.original,
-                                        back: msg.feedback!.improved,
-                                        context: msg.feedback!.explanation,
-                                        sessionId: Date.now().toString()
-                                    }));
+                                // 3. Save Flashcards (Scoped to Session from Recap)
+                                const newCards = finalRecap.saved_phrases.map((phrase: any) => ({
+                                    id: Date.now().toString() + Math.random(),
+                                    front: phrase.phrase,
+                                    back: phrase.translation,
+                                    context: phrase.pronunciation_hint || '',
+                                    sessionId: curSessionId,
+                                    originalPhrase: phrase
+                                }));
 
                                 if (newCards.length > 0) {
                                     await StorageService.saveFlashcards(newCards);
                                 }
 
-                                setModalVisible(false);
-                                router.replace('/session-summary');
+                                setIsGeneratingRecap(false);
+                                setStatus('idle');
+                                router.replace({ pathname: '/session-summary', params: { sessionId: curSessionId } });
                             }}
                         >
                             <Text style={styles.modalEndText}>End Session</Text>
@@ -321,6 +389,16 @@ export default function ConversationScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Generating Recap Overlay */}
+            {isGeneratingRecap && (
+                <View style={[styles.modalOverlay, { zIndex: 999 }]}>
+                    <View style={styles.loadingBox}>
+                        <ActivityIndicator size="large" color={Theme.colors.primary} />
+                        <Text style={styles.loadingText}>Generating recap...</Text>
+                    </View>
+                </View>
+            )}
 
         </SafeAreaView>
     );
@@ -412,6 +490,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
     },
     modalContent: {
         backgroundColor: '#FFF',
@@ -468,5 +551,23 @@ const styles = StyleSheet.create({
         color: Theme.colors.text,
         fontWeight: '600',
         fontSize: 16,
+    },
+    loadingBox: {
+        backgroundColor: '#FFF',
+        padding: 24,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 5,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: Theme.colors.text,
+        fontWeight: '600',
     }
 });

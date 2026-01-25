@@ -25,6 +25,7 @@ interface SessionState {
     // Actions
     setConfig: (lang: 'English' | 'French', level: string, scenario: string) => void;
     addMessage: (msg: Message) => void;
+    setTranscript: (messages: Message[]) => void;
     setStatus: (status: SessionState['status']) => void;
     resetSession: () => void;
 }
@@ -41,6 +42,8 @@ export const useSessionStore = create<SessionState>((set) => ({
     addMessage: (msg) => set((state) => ({
         transcript: [...state.transcript, msg]
     })),
+
+    setTranscript: (messages) => set({ transcript: messages }),
 
     setStatus: (status) => set({ status }),
 
