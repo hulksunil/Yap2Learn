@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Theme } from '../constants/theme';
 import { useSessionStore } from '../store/useSessionStore';
-import { MessageSquare } from 'lucide-react-native';
+// import { MessageSquare } from 'lucide-react-native';
+const logoImg = require('../assets/splash-icon.png');
 
 export default function SplashScreen() {
     const router = useRouter();
@@ -30,9 +31,11 @@ export default function SplashScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.logoContainer}>
-                <View style={styles.iconWrapper}>
-                    <MessageSquare size={48} color="#FFF" fill="#FFF" />
-                </View>
+                <Image
+                    source={logoImg}
+                    style={{ width: 120, height: 120, borderRadius: 30 }}
+                    resizeMode="contain"
+                />
                 <Text style={styles.title}>Yap2Learn</Text>
                 <Text style={styles.subtitle}>Learning to yap</Text>
             </View>
