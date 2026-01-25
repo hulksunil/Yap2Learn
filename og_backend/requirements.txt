@@ -1,6 +1,0 @@
-sounddevice
-soundfile
-numpy
-elevenlabs
-python-dotenv
-google-generativeai
