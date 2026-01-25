@@ -13,11 +13,17 @@ import { useSessionStore } from '../store/useSessionStore';
 export default function FlashcardsScreen() {
     const router = useRouter();
     // Get sessionId from params if passed (e.g. from summary)
-    // Note: expo-router useLocalSearchParams might return string | string[]
     const { sessionId } = useLocalSearchParams();
 
-    const [cards, setCards] = useState<FlashcardData[]>([]);
+    // -- STATE --
+    const [allLocalCards, setAllLocalCards] = useState<FlashcardData[]>([]);
+    const [displayedCards, setDisplayedCards] = useState<FlashcardData[]>([]); // What is actually shown
     const [currentIndex, setCurrentIndex] = useState(0);
+
+    const [currentScenarioId, setCurrentScenarioId] = useState<string>('All');
+    const [allScenarios, setAllScenarios] = useState<string[]>(['All']);
+    const [showPicker, setShowPicker] = useState(false);
+    const [scenarioMap, setScenarioMap] = useState<Record<string, string>>({}); // sessionId -> scenarioName
 
     const [sound, setSound] = useState<Audio.Sound>();
     const [playingId, setPlayingId] = useState<string | null>(null);
@@ -28,37 +34,181 @@ export default function FlashcardsScreen() {
     const [targetLang, setTargetLang] = useState('French');
     const [nativeLang, setNativeLang] = useState(globalNativeLanguage || 'English');
 
+    const [mode, setMode] = useState<'SCENARIO' | 'STRUGGLES'>('SCENARIO');
+
     useFocusEffect(
         React.useCallback(() => {
-            loadCards();
+            initializeScreen();
             return () => {
                 if (sound) sound.unloadAsync();
             };
         }, [])
     );
 
-    const loadCards = async () => {
-        const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
-        const data = await StorageService.getFlashcards(sid);
-        setCards(data);
+    // Effect: Filter cards when Scenario or Mode changes
+    React.useEffect(() => {
+        if (mode === 'SCENARIO') {
+            filterCardsByScenario(currentScenarioId);
 
-        // Fetch session for language info
-        if (sid) {
-            const history = await StorageService.getHistory();
-            const session = history.find(s => s.id === sid);
-            if (session) {
-                setTargetLang(session.language || 'French');
-                if (session.nativeLanguage) {
-                    setNativeLang(session.nativeLanguage);
+            // Background: Enrich with Mongo if specific scenario selected
+            if (currentScenarioId !== 'All') {
+                fetchCloudCardsForScenario(currentScenarioId);
+            }
+        } else if (mode === 'STRUGGLES') {
+            loadStruggles();
+        }
+    }, [currentScenarioId, mode, allLocalCards]); // Re-run if local cards update (e.g. initial load)
+
+    const initializeScreen = async () => {
+        // 1. Parallel Load Local Data (Blocking for minimal time)
+        const [history, flashcards] = await Promise.all([
+            StorageService.getHistory(),
+            StorageService.getFlashcards()
+        ]);
+
+        // 2. Build Scenario Map (sessionId -> scenarioName)
+        const sMap: Record<string, string> = {};
+        const distinctScenarios = new Set<string>();
+
+        history.forEach(s => {
+            if (s.scenario) {
+                // Normalize case? For now keep strict
+                sMap[s.id] = s.scenario;
+                if (s.scenario.trim().length > 0) {
+                    distinctScenarios.add(s.scenario);
                 }
-                console.log('FlashcardsScreen: loaded session languages', {
-                    sid,
-                    target: session.language || 'French',
-                    native: session.nativeLanguage || 'undefined',
-                    currentNativeState: nativeLang
-                });
+            }
+        });
+        setScenarioMap(sMap);
+
+        // 3. Update Scenario List (Local First)
+        // Ensure 'All' is always first.
+        const sortedScenarios = Array.from(distinctScenarios).sort();
+        setAllScenarios(['All', ...sortedScenarios]);
+
+        // 4. Set Local Cards State
+        setAllLocalCards(flashcards);
+
+        // 5. Intelligent Default Selection
+        const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+        if (sid) {
+            // If passed a sessionId, try to switch to that scenario
+            const target = sMap[sid];
+            if (target) {
+                setCurrentScenarioId(target);
+                // Also set language from session if possible
+                const sess = history.find(s => s.id === sid);
+                if (sess) {
+                    setTargetLang(sess.language || 'French');
+                    if (sess.nativeLanguage) setNativeLang(sess.nativeLanguage);
+                }
+            }
+        } else if (history.length > 0) {
+            // Default to most recent scenario
+            const last = history[0];
+            if (last.scenario) {
+                setCurrentScenarioId(last.scenario);
+                setTargetLang(last.language || 'French');
             }
         }
+
+        // 6. Background: Fetch Cloud Scenarios to enrich list
+        fetchCloudScenarios(distinctScenarios);
+    };
+
+    const filterCardsByScenario = (scenario: string) => {
+        let filtered: FlashcardData[] = [];
+
+        if (scenario === 'All') {
+            filtered = allLocalCards;
+        } else {
+            // Filter local cards that belong to sessions of this scenario
+            // Look up which sessionIds map to this scenario
+            filtered = allLocalCards.filter(c => scenarioMap[c.sessionId] === scenario);
+        }
+
+        // Safety: If filtered is empty for 'All', it's truly empty.
+        // If filtered is empty for specific scenario locally, it might be cloud only.
+
+        setDisplayedCards(filtered);
+        // Reset index only if we are out of bounds or just switched context
+        // Simple approach: Always reset index on filter change
+        if (currentIndex >= filtered.length) {
+            setCurrentIndex(0);
+        }
+    };
+
+    const fetchCloudScenarios = async (localSet: Set<string>) => {
+        try {
+            // Lazy import to avoid cycle if any
+            import('../services/api/mongo').then(async ({ MongoService }) => {
+                const cloudList = await MongoService.getAvailableScenarios();
+                if (cloudList && cloudList.length > 0) {
+                    let changed = false;
+                    cloudList.forEach((s: string) => {
+                        if (!localSet.has(s)) {
+                            localSet.add(s);
+                            changed = true;
+                        }
+                    });
+                    if (changed) {
+                        setAllScenarios(['All', ...Array.from(localSet).sort()]);
+                    }
+                }
+            });
+        } catch (e) { /* Silent fail */ }
+    };
+
+    const fetchCloudCardsForScenario = async (scenario: string) => {
+        try {
+            import('../services/api/mongo').then(async ({ MongoService }) => {
+                const cloudCards = await MongoService.getFlashcardsByScenario(scenario, targetLang);
+                if (cloudCards && cloudCards.length > 0) {
+                    setAllLocalCards(prev => {
+                        // Merge unique
+                        const existingIds = new Set(prev.map(c => c.id));
+                        const newItems: FlashcardData[] = [];
+                        cloudCards.forEach((c: any) => {
+                            // Use phrase as simple ID check
+                            const exists = prev.find(p => p.front === c.phrase);
+                            if (!exists && !existingIds.has(c._id)) {
+                                newItems.push({
+                                    id: c._id || c.id,
+                                    front: c.phrase,
+                                    back: c.translation,
+                                    context: c.context,
+                                    sessionId: c.sourceSessionId, // This might not map locally, which is fine
+                                });
+                            }
+                        });
+
+                        if (newItems.length > 0) {
+                            return [...prev, ...newItems];
+                        }
+                        return prev;
+                    });
+                }
+            });
+        } catch (e) { /* Silent fail */ }
+    };
+
+    const loadStruggles = () => {
+        setDisplayedCards([]);
+        try {
+            import('../services/api/mongo').then(async ({ MongoService }) => {
+                const strugglers = await MongoService.getStruggledFlashcards(targetLang);
+                if (strugglers && strugglers.length > 0) {
+                    const mapped: FlashcardData[] = strugglers.map((s: any) => ({
+                        id: s._id || s.id,
+                        front: s.phrase,
+                        back: s.back || `${s.translation}\n\n"${s.phrase}"`,
+                        context: s.context || (s.reason ? `💡 ${s.reason}` : ''),
+                        sessionId: s.sourceSessionId
+                    }));
+                    setDisplayedCards(mapped);
+                }
+            });
+        } catch (e) { setDisplayedCards([]); }
     };
 
     const playAudio = async (text: string, id: string) => {
@@ -110,7 +260,7 @@ export default function FlashcardsScreen() {
             sound.stopAsync();
             setPlayingId(null);
         }
-        if (currentIndex < cards.length - 1) {
+        if (currentIndex < displayedCards.length - 1) {
             setCurrentIndex(currentIndex + 1);
         }
     };
@@ -125,7 +275,18 @@ export default function FlashcardsScreen() {
         }
     };
 
-    const currentCard = cards[currentIndex];
+    const currentCard = displayedCards[currentIndex];
+
+    // -- HELPER: Friendly Titles --
+    const SCENARIO_TITLES: Record<string, string> = {
+        'cafe': 'Ordering at a Cafe',
+        'job': 'Job Interview',
+        'All': 'All Scenarios'
+    };
+
+    const getDisplayTitle = (scen: string) => {
+        return SCENARIO_TITLES[scen] || scen;
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -134,12 +295,59 @@ export default function FlashcardsScreen() {
                 <TouchableOpacity onPress={() => router.back()}>
                     <ArrowLeft size={24} color={Theme.colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Review Flashcards</Text>
+
+                <TouchableOpacity onPress={() => setShowPicker(!showPicker)} style={styles.headerPicker}>
+                    <Text style={styles.headerTitle}>
+                        {mode === 'STRUGGLES' ? 'Struggled With' : getDisplayTitle(currentScenarioId || 'All')}
+                    </Text>
+                    {mode === 'SCENARIO' && <ArrowRight size={16} color={Theme.colors.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} />}
+                </TouchableOpacity>
                 <View style={{ width: 24 }} />
             </View>
 
+            {/* Scenario Picker (Scrollable List) */}
+            {showPicker && mode === 'SCENARIO' && (
+                <View style={styles.pickerContainer}>
+                    <Text style={styles.pickerTitle}>SELECT A SCENARIO</Text>
+                    {allScenarios.length > 0 ? (
+                        allScenarios.map(scen => (
+                            <TouchableOpacity
+                                key={scen}
+                                style={[styles.pickerItem, scen === currentScenarioId && styles.pickerItemActive]}
+                                onPress={() => {
+                                    setCurrentScenarioId(scen);
+                                    setShowPicker(false);
+                                }}
+                            >
+                                <Text style={[styles.pickerItemText, scen === currentScenarioId && styles.pickerItemTextActive]}>
+                                    {getDisplayTitle(scen)}
+                                </Text>
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <Text style={{ padding: 10, color: '#999' }}>No scenarios found yet.</Text>
+                    )}
+                </View>
+            )}
+
+            {/* Mode Toggle */}
+            <View style={styles.toggleContainer}>
+                <TouchableOpacity
+                    style={[styles.toggleBtn, mode === 'SCENARIO' && styles.toggleBtnActive]}
+                    onPress={() => { setMode('SCENARIO'); setCurrentIndex(0); }}
+                >
+                    <Text style={[styles.toggleText, mode === 'SCENARIO' && styles.toggleTextActive]}>By Scenario</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.toggleBtn, mode === 'STRUGGLES' && styles.toggleBtnActive]}
+                    onPress={() => { setMode('STRUGGLES'); setCurrentIndex(0); }}
+                >
+                    <Text style={[styles.toggleText, mode === 'STRUGGLES' && styles.toggleTextActive]}>Struggled With</Text>
+                </TouchableOpacity>
+            </View>
+
             <View style={styles.content}>
-                {cards.length > 0 ? (
+                {displayedCards.length > 0 ? (
                     <Flashcard
                         key={currentCard.id}
                         front={currentCard.front}
@@ -152,16 +360,22 @@ export default function FlashcardsScreen() {
                         isLoading={loadingId === currentCard.id}
                     />
                 ) : (
-                    <Text style={styles.emptyText}>No flashcards saved yet.</Text>
+                    <View style={{ alignItems: 'center', marginTop: 40 }}>
+                        <Text style={styles.emptyText}>
+                            {mode === 'STRUGGLES'
+                                ? "No smart recommendations yet.\nTry initializing the cloud or practicing more!"
+                                : "No flashcards found for this scenario."}
+                        </Text>
+                    </View>
                 )}
 
-                {cards.length > 0 && (
-                    <Text style={styles.counter}>{currentIndex + 1} / {cards.length}</Text>
+                {displayedCards.length > 0 && (
+                    <Text style={styles.counter}>{currentIndex + 1} / {displayedCards.length}</Text>
                 )}
             </View>
 
             {/* Navigation Buttons */}
-            {cards.length > 0 && (
+            {displayedCards.length > 0 && (
                 <View style={styles.navContainer}>
                     <TouchableOpacity
                         style={[styles.navBtn, currentIndex === 0 && { opacity: 0.5 }]}
@@ -173,9 +387,9 @@ export default function FlashcardsScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.navBtnPrimary, currentIndex === cards.length - 1 && { opacity: 0.5 }]}
+                        style={[styles.navBtnPrimary, currentIndex === displayedCards.length - 1 && { opacity: 0.5 }]}
                         onPress={handleNext}
-                        disabled={currentIndex === cards.length - 1}
+                        disabled={currentIndex === displayedCards.length - 1}
                     >
                         <Text style={styles.navBtnTextPrimary}>Next</Text>
                         <ArrowRight size={20} color="#FFF" />
@@ -277,5 +491,82 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 4,
         color: Theme.colors.textSecondary,
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        marginHorizontal: 24,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 4,
+        marginBottom: 16,
+    },
+    toggleBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: 10,
+    },
+    toggleBtnActive: {
+        backgroundColor: '#FFF',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Theme.colors.textSecondary,
+    },
+    toggleTextActive: {
+        color: Theme.colors.primary,
+    },
+    headerPicker: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#F3F4F6',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+    },
+    pickerContainer: {
+        position: 'absolute',
+        top: 100,
+        left: 24,
+        right: 24,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        zIndex: 100,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+    },
+    pickerTitle: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: Theme.colors.textSecondary,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+    pickerItem: {
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    pickerItemActive: {
+        backgroundColor: '#EFF6FF',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+    },
+    pickerItemText: {
+        fontSize: 16,
+        color: Theme.colors.text,
+    },
+    pickerItemTextActive: {
+        color: Theme.colors.primary,
+        fontWeight: '600',
     }
 });
