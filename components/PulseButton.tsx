@@ -13,7 +13,10 @@ export const PulseButton: React.FC<PulseButtonProps> = ({ onPress, state }) => {
         <View style={styles.wrapper}>
             <View style={styles.outerRing}>
                 <TouchableOpacity
-                    style={styles.button}
+                    style={[
+                        styles.button,
+                        state === 'recording' && { backgroundColor: Theme.colors.error }
+                    ]}
                     onPress={onPress}
                     activeOpacity={0.8}
                 >

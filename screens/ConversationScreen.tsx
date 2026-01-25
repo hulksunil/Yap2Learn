@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIn
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
-import { ArrowLeft, MoreVertical, Keyboard, Lightbulb, AudioWaveform as Waveform, X } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Keyboard, Lightbulb, AudioWaveform as Waveform, X, Volume2 } from 'lucide-react-native';
 import { ChatBubble } from '../components/ChatBubble';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { PulseButton } from '../components/PulseButton';
@@ -27,10 +27,18 @@ export default function ConversationScreen() {
     const [playingText, setPlayingText] = useState<string | null>(null);
     const [loadingText, setLoadingText] = useState<string | null>(null);
     const [isGeneratingRecap, setIsGeneratingRecap] = useState(false);
+
+
+
     // Scenario Mapping
     const SCENARIO_TITLES: Record<string, string> = {
         'cafe': 'Ordering at a Cafe',
         'job': 'Job Interview'
+    };
+
+    const SCENARIO_ROLES: Record<string, string> = {
+        'cafe': 'Barista',
+        'job': 'Interviewer'
     };
 
     const {
@@ -40,10 +48,30 @@ export default function ConversationScreen() {
         level,
         targetLanguage,
         nativeLanguage,
+        customScenario, // NEW
         setStatus,
         addMessage,
         setTranscript
     } = useSessionStore();
+
+    // Scenario Mapping
+    const scenarioTitle = scenario === 'custom' && customScenario
+        ? customScenario.name
+        : (SCENARIO_TITLES[scenario] || 'Conversation');
+
+    const scenarioRole = scenario === 'custom'
+        ? 'Agent'
+        : (SCENARIO_ROLES[scenario] || 'Agent');
+
+    // Suggestion Visibility State (Beginner: Visible, Others: Hidden)
+    const [showSuggestions, setShowSuggestions] = useState(true);
+
+    // Update visibility when level changes
+    useEffect(() => {
+        // Safe check for string sensitivity
+        const isBeginner = (level || '').toLowerCase() === 'beginner';
+        setShowSuggestions(isBeginner);
+    }, [level]);
 
     // Basic Sound Cleanup
     useEffect(() => {
@@ -98,7 +126,13 @@ export default function ConversationScreen() {
         }
 
         // Use LLM gen if key exists
-        const greetingData = await LLMService.generateGreeting(scenario, level, targetLanguage, nativeLanguage);
+        const greetingData = await LLMService.generateGreeting(
+            scenario,
+            level,
+            targetLanguage,
+            nativeLanguage,
+            customScenario
+        );
 
         if (greetingData) {
             initialGreeting = greetingData.text;
@@ -201,7 +235,14 @@ export default function ConversationScreen() {
             }
 
             // 2. LLM (Generate Response)
-            const aiResponse = await LLMService.generateResponse(userText, scenario, level, targetLanguage, nativeLanguage);
+            const aiResponse = await LLMService.generateResponse(
+                userText,
+                scenario,
+                level,
+                targetLanguage,
+                nativeLanguage,
+                customScenario
+            );
 
             if (!aiResponse) {
                 setStatus('idle');
@@ -252,7 +293,7 @@ export default function ConversationScreen() {
                     <ArrowLeft size={24} color={Theme.colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>{SCENARIO_TITLES[scenario] || 'Conversation'}</Text>
+                    <Text style={styles.headerTitle}>{scenarioTitle}</Text>
                     <Text style={styles.headerSubtitle}>{targetLanguage.toUpperCase()} • {level.toUpperCase()}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setModalVisible(true)}>
@@ -275,7 +316,7 @@ export default function ConversationScreen() {
                             styles.senderLabel,
                             msg.role === 'user' && { alignSelf: 'flex-end', marginRight: 42 }
                         ]}>
-                            {msg.role === 'user' ? 'You' : 'Barista'}
+                            {msg.role === 'user' ? 'You' : scenarioRole}
                         </Text>
 
                         <ChatBubble
@@ -307,53 +348,66 @@ export default function ConversationScreen() {
                 <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Footer Controls - Hide if Read Only */}
-            {!isReadOnly && (
-            {/* Footer Controls */}
+            {/* Footer Container */}
             <View style={styles.footerContainer}>
-                {/* Suggested Response */}
-                {transcript.length > 0 && transcript[transcript.length - 1].role === 'assistant' && transcript[transcript.length - 1].suggestedResponse && (
-                    <View style={styles.suggestionContainer}>
-                        <View style={styles.suggestionLabelContainer}>
-                            <Lightbulb size={12} color="#FFF" />
-                            <Text style={styles.suggestionLabel}>Suggestion</Text>
+                {!isReadOnly && (
+                    <>
+                        {/* Suggested Response */}
+                        {showSuggestions && transcript.length > 0 && transcript[transcript.length - 1].role === 'assistant' && transcript[transcript.length - 1].suggestedResponse && (
+                            <View style={styles.suggestionContainer}>
+                                <View style={styles.suggestionLabelContainer}>
+                                    <Lightbulb size={12} color="#FFF" />
+                                    <Text style={styles.suggestionLabel}>Suggestion</Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => transcript[transcript.length - 1].suggestedResponse?.text && playText(transcript[transcript.length - 1].suggestedResponse!.text)}
+                                    activeOpacity={0.7}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                >
+                                    <Text style={styles.suggestionText}>
+                                        "{transcript[transcript.length - 1].suggestedResponse?.text}"
+                                    </Text>
+                                    <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: 4, borderRadius: 12 }}>
+                                        <Volume2 size={14} color="#FFF" />
+                                    </View>
+                                </TouchableOpacity>
+                                <Text style={styles.suggestionTranslation}>
+                                    {transcript[transcript.length - 1].suggestedResponse?.translation}
+                                </Text>
+                            </View>
+                        )}
+
+                        <View style={styles.footer}>
+                            <TouchableOpacity
+                                style={[styles.iconBtn, { backgroundColor: showSuggestions ? '#E0F2FE' : '#FFF' }]}
+                                onPress={() => setShowSuggestions(!showSuggestions)}
+                            >
+                                <Lightbulb size={24} color={showSuggestions ? Theme.colors.primary : Theme.colors.textSecondary} />
+                            </TouchableOpacity>
+
+                            <PulseButton
+                                state={status}
+                                onPress={handleMicPress}
+                            />
+
+                            <TouchableOpacity style={styles.iconBtn}>
+                                <Keyboard size={24} color={Theme.colors.textSecondary} />
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.suggestionText}>
-                            "{transcript[transcript.length - 1].suggestedResponse?.text}"
-                        </Text>
-                        <Text style={styles.suggestionTranslation}>
-                            {transcript[transcript.length - 1].suggestedResponse?.translation}
-                        </Text>
-                    </View>
+                    </>
                 )}
 
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.iconBtn}>
-                        <Lightbulb size={24} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    <PulseButton
-                        state={status}
-                        onPress={handleMicPress}
-                    />
-
-                    <TouchableOpacity style={styles.iconBtn}>
-                        <Keyboard size={24} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                </View>
-            )}
-
-            {/* Read Only Footer Alt */}
-            {isReadOnly && (
-                <View style={styles.footer}>
-                    <TouchableOpacity
-                        style={[styles.modalEndBtn, { backgroundColor: Theme.colors.primary, borderRadius: 30 }]}
-                        onPress={() => router.push({ pathname: '/session-summary', params: { sessionId } })}
-                    >
-                        <Text style={styles.modalEndText}>View Summary</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+                {/* Read Only Footer Alt */}
+                {isReadOnly && (
+                    <View style={styles.footer}>
+                        <TouchableOpacity
+                            style={[styles.modalEndBtn, { backgroundColor: Theme.colors.primary, borderRadius: 30 }]}
+                            onPress={() => router.push({ pathname: '/session-summary', params: { sessionId } })}
+                        >
+                            <Text style={styles.modalEndText}>View Summary</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {/* End Session Modal */}
@@ -382,7 +436,7 @@ export default function ConversationScreen() {
                                 setIsGeneratingRecap(true); // Trigger Overlay
 
                                 // 1. Generate Recap
-                                const recap = await LLMService.generateSessionRecap(transcript);
+                                const recap = await LLMService.generateSessionRecap(transcript, targetLanguage, nativeLanguage);
 
                                 // Default fallback (must be defined locally!)
                                 const finalRecap = recap || {
@@ -397,8 +451,8 @@ export default function ConversationScreen() {
                                     id: curSessionId,
                                     date: new Date().toISOString(),
                                     scenario: scenario,
-                                    language: 'French',
                                     language: targetLanguage,
+                                    nativeLanguage: nativeLanguage, // Save native language
                                     level: level,
                                     turnsCount: transcript.length,
                                     transcript: transcript,
@@ -406,10 +460,13 @@ export default function ConversationScreen() {
                                 });
 
                                 // 3. Save Flashcards (Scoped to Session from Recap)
+                                // User Rule: "Make sure that the content of the flashcard has both the language that I'm trying to learn and the language that I speak"
+                                // We put the translation AND the original phrase on the back so the user sees both when flipped.
                                 const newCards = finalRecap.saved_phrases.map((phrase: any) => ({
                                     id: Date.now().toString() + Math.random(),
                                     front: phrase.phrase,
-                                    back: phrase.translation,
+                                    // Back shows Translation + Original Phrase (for reinforcement)
+                                    back: `${phrase.translation}\n\n"${phrase.phrase}"`,
                                     context: phrase.pronunciation_hint || '',
                                     sessionId: curSessionId,
                                     originalPhrase: phrase
@@ -614,7 +671,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: Theme.colors.text,
         fontWeight: '600',
-    }
+    },
     footerContainer: {
         width: '100%',
         paddingBottom: 20,

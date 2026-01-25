@@ -26,6 +26,7 @@ export interface SessionRecord {
     date: string; // ISO string
     scenario: string;
     language: string;
+    nativeLanguage?: string; // Added for correct flashcard display
     level: string;
     turnsCount: number;
     transcript: any[]; // Full message history

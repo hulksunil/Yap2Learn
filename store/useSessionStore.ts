@@ -24,10 +24,15 @@ interface SessionState {
     nativeLanguage: string;
     targetLanguage: string;
     hasOnboarded: boolean;
+    customScenarios: { id: string; name: string; context: string; }[];
 
     // Session-Specific Configuration
     level: string;
     scenario: string;
+    customScenario?: {
+        name: string;
+        context: string;
+    };
 
     // Session Data
     transcript: Message[];
@@ -36,7 +41,9 @@ interface SessionState {
     // Actions
     setLanguages: (native: string, target: string) => void;
     completeOnboarding: () => void;
-    setSessionConfig: (level: string, scenario: string) => void;
+    setSessionConfig: (level: string, scenario: string, customScenario?: { name: string; context: string; }) => void;
+    addCustomScenario: (scenario: { id: string; name: string; context: string; }) => void;
+    deleteCustomScenario: (id: string) => void;
     addMessage: (msg: Message) => void;
     setTranscript: (messages: Message[]) => void;
     setStatus: (status: SessionState['status']) => void;
@@ -53,6 +60,7 @@ export const useSessionStore = create<SessionState>()(
             nativeLanguage: 'English',
             targetLanguage: 'French',
             hasOnboarded: false,
+            customScenarios: [],
 
             level: 'Intermediate',
             scenario: 'cafe',
@@ -63,7 +71,15 @@ export const useSessionStore = create<SessionState>()(
 
             completeOnboarding: () => set({ hasOnboarded: true }),
 
-            setSessionConfig: (level, scenario) => set({ level, scenario }),
+            setSessionConfig: (level, scenario, customScenario) => set({ level, scenario, customScenario }),
+
+            addCustomScenario: (scenario) => set((state) => ({
+                customScenarios: [...state.customScenarios, scenario]
+            })),
+
+            deleteCustomScenario: (id) => set((state) => ({
+                customScenarios: state.customScenarios.filter(s => s.id !== id)
+            })),
 
             // Legacy compatibility: Maps the old "language" arg to targetLanguage for now
             setConfig: (language, level, scenario) => set({ targetLanguage: language, level, scenario }),
@@ -72,9 +88,8 @@ export const useSessionStore = create<SessionState>()(
                 transcript: [...state.transcript, msg]
             })),
 
-    setTranscript: (messages) => set({ transcript: messages }),
+            setTranscript: (messages) => set({ transcript: messages }),
 
-    setStatus: (status) => set({ status }),
             setStatus: (status) => set({ status }),
 
             resetSession: () => set({
@@ -88,7 +103,8 @@ export const useSessionStore = create<SessionState>()(
             partialize: (state) => ({
                 nativeLanguage: state.nativeLanguage,
                 targetLanguage: state.targetLanguage,
-                hasOnboarded: state.hasOnboarded
+                hasOnboarded: state.hasOnboarded,
+                customScenarios: state.customScenarios
             }),
         }
     )

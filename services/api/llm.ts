@@ -8,7 +8,8 @@ export const LLMService = {
         scenario: string,
         level: string,
         targetLanguage: string,
-        nativeLanguage: string
+        nativeLanguage: string,
+        customScenario?: { name: string; context: string; }
     ): Promise<{ text: string; feedback?: any; translation?: string; suggestedResponse?: { text: string; translation: string; } } | null> => {
         if (!GEMINI_API_KEY) {
             console.error('Missing Gemini API Key');
@@ -19,8 +20,13 @@ export const LLMService = {
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+            const scenarioPrompt = customScenario
+                ? `Scenario: "${customScenario.name}". Context: "${customScenario.context}"`
+                : `Scenario: "${scenario}"`;
+
             const prompt = `
-        You are a helpful language tutor roleplaying a scenario: "${scenario}". 
+        You are a helpful language tutor roleplaying a scenario.
+        ${scenarioPrompt}
         The student is at level: "${level}".
         Language to practice (Target): ${targetLanguage}.
         Student's Native Language: ${nativeLanguage}.
@@ -74,7 +80,11 @@ export const LLMService = {
         }
     },
 
-    generateSessionRecap: async (transcript: any[]): Promise<any | null> => {
+    generateSessionRecap: async (
+        transcript: any[],
+        targetLanguage: string = 'French',
+        nativeLanguage: string = 'English'
+    ): Promise<any | null> => {
         if (!GEMINI_API_KEY) return null;
 
         try {
@@ -89,15 +99,16 @@ export const LLMService = {
 
             const prompt = `
              Analyze this conversation transcript between a user (student) and an AI (tutor).
-             Target Language: French.
+             Target Language: ${targetLanguage}.
+             Student's Native Language: ${nativeLanguage}.
              
              Generate a JSON session recap with exactly this structure:
              {
                "saved_phrases": [
                  {
-                   "phrase": "French phrase from conversation or relevant to it",
-                   "translation": "English translation",
-                   "example_sentence": "Example usage in French",
+                   "phrase": "Phrase in ${targetLanguage}",
+                   "translation": "Translation in ${nativeLanguage}",
+                   "example_sentence": "Example usage in ${targetLanguage}",
                    "difficulty": "beginner" | "intermediate" | "advanced",
                    "pronunciation_hint": "phonetic-ish hint (optional)"
                  }
@@ -106,21 +117,22 @@ export const LLMService = {
                  {
                    "you_said": "User's mistake",
                    "better": "Corrected version",
-                   "tip": "Short explanation",
+                   "tip": "Short explanation in ${nativeLanguage}",
                    "category": "grammar" | "vocab" | "pronunciation_guess" | "fluency"
                  }
                ],
                "suggestions": [
-                 "Actionable suggestion 1",
-                 "Actionable suggestion 2",
-                 "Actionable suggestion 3"
+                 "Actionable suggestion 1 (in ${nativeLanguage})",
+                 "Actionable suggestion 2 (in ${nativeLanguage})",
+                 "Actionable suggestion 3 (in ${nativeLanguage})"
                ]
              }
 
-             Criteria:
-             1. Select 3-5 useful phrases the user should remember (can be improved versions of what they tried to say).
-             2. Select 3-5 key corrections based on their actual mistakes.
-             3. Provide 3 concrete suggestions for next time.
+             IMPORTANT LANGUAGE RULES:
+             - 'saved_phrases' -> 'phrase' and 'example_sentence' must be in ${targetLanguage}.
+             - 'saved_phrases' -> 'translation' must be in ${nativeLanguage}.
+             - 'top_corrections' -> 'tip' must be in ${nativeLanguage}.
+             - 'suggestions' -> ALL items must be written in ${nativeLanguage} (so the student understands how to improve).
 
              Transcript:
              ${context}
@@ -129,8 +141,18 @@ export const LLMService = {
             const result = await model.generateContent(prompt);
             const text = result.response.text();
 
-            // Clean and Parse
-            const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            // Robust JSON extraction
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.error("No JSON found in recap response");
+                return {
+                    saved_phrases: [],
+                    top_corrections: [],
+                    suggestions: ["Keep practicing!"]
+                };
+            }
+
+            const cleanJson = jsonMatch[0];
             return JSON.parse(cleanJson);
         } catch (error) {
             console.error('LLM Recap Error:', error);
@@ -141,18 +163,19 @@ export const LLMService = {
                 suggestions: ["Keep practicing!"]
             };
         }
-    }
+    },
 
     generateGreeting: async (
         scenario: string,
         level: string,
         targetLanguage: string,
-        nativeLanguage: string = 'English'
+        nativeLanguage: string = 'English',
+        customScenario?: { name: string; context: string; }
     ): Promise<{ text: string; translation: string; suggestedResponse?: { text: string; translation: string; } } | null> => {
         if (!GEMINI_API_KEY) {
             return {
-                text: `Hello! Ready for ${scenario}?`,
-                translation: `Bonjour! Prêt pour ${scenario}?`,
+                text: `Hello! Ready for ${customScenario ? customScenario.name : scenario}?`,
+                translation: `Bonjour! Prêt pour ${customScenario ? customScenario.name : scenario}?`,
                 suggestedResponse: { text: "Yes, I am ready.", translation: "Oui, je suis prêt." }
             };
         }
@@ -161,9 +184,13 @@ export const LLMService = {
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+            const scenarioPrompt = customScenario
+                ? `Scenario: "${customScenario.name}". Context: "${customScenario.context}"`
+                : `Scenario: "${scenario}"`;
+
             const prompt = `
             You are a roleplay partner in a language learning app.
-            Scenario: "${scenario}".
+            ${scenarioPrompt}
             Student Level: "${level}".
             Language: ${targetLanguage}.
             Native Language: ${nativeLanguage}.

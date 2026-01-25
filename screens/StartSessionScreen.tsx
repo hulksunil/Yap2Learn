@@ -1,29 +1,81 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
 import { useSessionStore } from '../store/useSessionStore';
-import { X, MessageSquare, Coffee, Briefcase, ArrowRight, MoreVertical } from 'lucide-react-native';
+import { X, MessageSquare, Coffee, Briefcase, ArrowRight, MoreVertical, Plus, Trash2 } from 'lucide-react-native';
 
 export default function StartSessionScreen() {
     const router = useRouter();
-    const { setSessionConfig, resetSession, targetLanguage } = useSessionStore();
+    const {
+        setSessionConfig,
+        resetSession,
+        targetLanguage,
+        customScenarios,
+        addCustomScenario,
+        deleteCustomScenario
+    } = useSessionStore();
+
     // Local state only for level and scenario now
     const [level, setLevel] = useState('Intermediate');
-    const [selectedScenario, setSelectedScenario] = useState('cafe');
+    const [selectedScenario, setSelectedScenario] = useState('cafe'); // 'cafe' | 'job' | customId
     const [showMenu, setShowMenu] = useState(false);
+
+    // Custom Scenario Form State
+    const [customModalVisible, setCustomModalVisible] = useState(false);
+    const [newCustomName, setNewCustomName] = useState('');
+    const [newCustomContext, setNewCustomContext] = useState('');
 
     const handleStart = () => {
         resetSession();
-        setSessionConfig(level, selectedScenario); // Updated store method
+        // Check if selected is a standard one
+        if (selectedScenario === 'cafe' || selectedScenario === 'job') {
+            setSessionConfig(level, selectedScenario);
+        } else {
+            // Must be a custom scenario ID
+            const custom = customScenarios.find(s => s.id === selectedScenario);
+            if (custom) {
+                setSessionConfig(level, 'custom', { name: custom.name, context: custom.context });
+            } else {
+                // Fallback
+                setSessionConfig(level, 'cafe');
+            }
+        }
         router.push('/conversation');
     };
 
+    const handleSaveCustom = () => {
+        if (!newCustomName.trim() || !newCustomContext.trim()) {
+            alert("Please fill in both fields.");
+            return;
+        }
+
+        const newId = Date.now().toString(); // Simple ID generation
+        addCustomScenario({
+            id: newId,
+            name: newCustomName,
+            context: newCustomContext
+        });
+
+        setSelectedScenario(newId);
+        setNewCustomName('');
+        setNewCustomContext('');
+        setCustomModalVisible(false);
+    };
+
+    const handleDeleteCustom = (id: string, event: any) => {
+        event.stopPropagation(); // Prevent selection when deleting
+        deleteCustomScenario(id);
+        if (selectedScenario === id) {
+            setSelectedScenario('cafe');
+        }
+    };
+
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} >
             {/* Header */}
-            <View style={styles.header}>
+            < View style={styles.header} >
                 <View style={{ width: 24 }} />
                 <View style={styles.headerTitleContainer}>
                     <MessageSquare size={18} color={Theme.colors.primary} fill={Theme.colors.primary} />
@@ -32,7 +84,7 @@ export default function StartSessionScreen() {
                 <TouchableOpacity onPress={() => setShowMenu(!showMenu)}>
                     <MoreVertical size={24} color={Theme.colors.text} />
                 </TouchableOpacity>
-            </View>
+            </View >
 
             {
                 showMenu && (
@@ -98,9 +150,11 @@ export default function StartSessionScreen() {
                     ))}
                 </View>
 
+
                 {/* Scenario Section */}
                 <Text style={styles.sectionLabel}>Scenario</Text>
 
+                {/* Cafe Card */}
                 <TouchableOpacity
                     style={[styles.scenarioCard, selectedScenario === 'cafe' && styles.scenarioCardActive]}
                     onPress={() => setSelectedScenario('cafe')}
@@ -115,6 +169,7 @@ export default function StartSessionScreen() {
                     <View style={[styles.radio, selectedScenario === 'cafe' && styles.radioActive]} />
                 </TouchableOpacity>
 
+                {/* Job Interview Card */}
                 <TouchableOpacity
                     style={[styles.scenarioCard, selectedScenario === 'job' && styles.scenarioCardActive]}
                     onPress={() => setSelectedScenario('job')}
@@ -129,6 +184,50 @@ export default function StartSessionScreen() {
                     <View style={[styles.radio, selectedScenario === 'job' && styles.radioActive]} />
                 </TouchableOpacity>
 
+                {/* REMOVED OLD ADD BUTTON */}
+
+                {/* Custom Scenario Card (if created) */}
+                {/* Custom Scenario List */}
+                {(customScenarios || []).map((custom) => (
+                    <TouchableOpacity
+                        key={custom.id}
+                        style={[styles.scenarioCard, selectedScenario === custom.id && styles.scenarioCardActive]}
+                        onPress={() => setSelectedScenario(custom.id)}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
+                            <MessageSquare size={24} color="#9333EA" />
+                        </View>
+                        <View style={styles.scenarioInfo}>
+                            <Text style={styles.scenarioTitle}>{custom.name}</Text>
+                            <Text style={styles.scenarioSub} numberOfLines={1}>{custom.context}</Text>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <TouchableOpacity
+                                onPress={(e) => handleDeleteCustom(custom.id, e)}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Trash2 size={20} color={Theme.colors.error} />
+                            </TouchableOpacity>
+                            <View style={[styles.radio, selectedScenario === custom.id && styles.radioActive]} />
+                        </View>
+                    </TouchableOpacity>
+                ))}
+
+                {/* Add Scenario Button (New) */}
+                <TouchableOpacity
+                    style={[styles.scenarioCard, { borderStyle: 'dashed', backgroundColor: '#F9FAFB' }]}
+                    onPress={() => setCustomModalVisible(true)}
+                >
+                    <View style={[styles.iconContainer, { backgroundColor: '#F3F4F6' }]}>
+                        <Plus size={24} color={Theme.colors.textSecondary} />
+                    </View>
+                    <View style={styles.scenarioInfo}>
+                        <Text style={[styles.scenarioTitle, { color: Theme.colors.textSecondary }]}>Add a Scenario</Text>
+                        <Text style={styles.scenarioSub}>Create your own practice (e.g. Math Class)</Text>
+                    </View>
+                </TouchableOpacity>
+
             </ScrollView>
 
             {/* Footer */}
@@ -141,6 +240,51 @@ export default function StartSessionScreen() {
                     <ArrowRight size={20} color="#FFF" style={{ marginLeft: 8 }} />
                 </TouchableOpacity>
             </View>
+
+            {/* Custom Scenario Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={customModalVisible}
+                onRequestClose={() => setCustomModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === "ios" ? "padding" : "height"}
+                        style={styles.modalOverlay}
+                    >
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>New Scenario</Text>
+                                <TouchableOpacity onPress={() => setCustomModalVisible(false)}>
+                                    <X size={24} color={Theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <Text style={styles.label}>Scenario Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. School Math Class"
+                                value={newCustomName}
+                                onChangeText={setNewCustomName}
+                            />
+
+                            <Text style={styles.label}>Context / Instructions</Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                placeholder="Describe the situation... (e.g. Asking the teacher about a calculus problem)"
+                                value={newCustomContext}
+                                onChangeText={setNewCustomContext}
+                                multiline
+                            />
+
+                            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveCustom}>
+                                <Text style={styles.saveBtnText}>Create Scenario</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </KeyboardAvoidingView>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView >
     );
 }
@@ -332,5 +476,67 @@ const styles = StyleSheet.create({
     menuDivider: {
         height: 1,
         backgroundColor: '#E5E7EB',
+    },
+    /* Modal Styles */
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 48,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: Theme.colors.text,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Theme.colors.text,
+        marginBottom: 8,
+    },
+    input: {
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 16,
+        fontSize: 16,
+        marginBottom: 20,
+        color: Theme.colors.text,
+    },
+    textArea: {
+        height: 100,
+        textAlignVertical: 'top',
+        paddingTop: 16,
+    },
+    saveBtn: {
+        backgroundColor: Theme.colors.primary,
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    saveBtnText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 16,
     }
 });

@@ -9,9 +9,19 @@ interface FlashcardProps {
     onPlay?: () => void;
     isPlaying?: boolean;
     isLoading?: boolean;
+    targetLanguage?: string;
+    nativeLanguage?: string;
 }
 
-export const Flashcard: React.FC<FlashcardProps> = ({ front, back, onPlay, isPlaying, isLoading }) => {
+export const Flashcard: React.FC<FlashcardProps> = ({
+    front,
+    back,
+    onPlay,
+    isPlaying,
+    isLoading,
+    targetLanguage = 'Target',
+    nativeLanguage = 'Native'
+}) => {
     const [flipped, setFlipped] = useState(false);
 
     // Legacy support: strip example sentence if present (delimited by \n\n)
@@ -24,8 +34,10 @@ export const Flashcard: React.FC<FlashcardProps> = ({ front, back, onPlay, isPla
             style={styles.card}
         >
             <View style={styles.header}>
-                <View style={styles.tag}>
-                    <Text style={styles.tagText}>French</Text>
+                <View style={[styles.tag, { backgroundColor: flipped ? '#F3F4F6' : '#EFF6FF' }]}>
+                    <Text style={[styles.tagText, { color: flipped ? Theme.colors.textSecondary : Theme.colors.primary }]}>
+                        {flipped ? nativeLanguage : targetLanguage}
+                    </Text>
                 </View>
                 {!flipped && onPlay && (
                     <TouchableOpacity

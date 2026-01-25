@@ -8,6 +8,7 @@ import { Flashcard } from '../components/Flashcard';
 import { StorageService, FlashcardData } from '../services/storage';
 import { TTSService } from '../services/api/tts';
 import { Audio } from 'expo-av';
+import { useSessionStore } from '../store/useSessionStore';
 
 export default function FlashcardsScreen() {
     const router = useRouter();
@@ -22,6 +23,11 @@ export default function FlashcardsScreen() {
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
+    const { nativeLanguage: globalNativeLanguage } = useSessionStore();
+
+    const [targetLang, setTargetLang] = useState('French');
+    const [nativeLang, setNativeLang] = useState(globalNativeLanguage || 'English');
+
     useFocusEffect(
         React.useCallback(() => {
             loadCards();
@@ -35,6 +41,24 @@ export default function FlashcardsScreen() {
         const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
         const data = await StorageService.getFlashcards(sid);
         setCards(data);
+
+        // Fetch session for language info
+        if (sid) {
+            const history = await StorageService.getHistory();
+            const session = history.find(s => s.id === sid);
+            if (session) {
+                setTargetLang(session.language || 'French');
+                if (session.nativeLanguage) {
+                    setNativeLang(session.nativeLanguage);
+                }
+                console.log('FlashcardsScreen: loaded session languages', {
+                    sid,
+                    target: session.language || 'French',
+                    native: session.nativeLanguage || 'undefined',
+                    currentNativeState: nativeLang
+                });
+            }
+        }
     };
 
     const playAudio = async (text: string, id: string) => {
@@ -120,6 +144,8 @@ export default function FlashcardsScreen() {
                         key={currentCard.id}
                         front={currentCard.front}
                         back={currentCard.back}
+                        targetLanguage={targetLang}
+                        nativeLanguage={nativeLang}
                         // Remove phonetic prop
                         onPlay={() => playAudio(currentCard.front, currentCard.id)}
                         isPlaying={playingId === currentCard.id}
