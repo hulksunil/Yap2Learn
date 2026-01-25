@@ -126,8 +126,14 @@ app.post('/api/embed-pending', async (req: any, res: any) => {
     try {
         const LIMIT = req.body.limit || 20;
 
-        // Find items without embedding
-        const pendingFlashcards = await Flashcard.find({ embedding: { $exists: false } }).limit(LIMIT);
+
+        // Find items without embedding (missing OR empty array)
+        const pendingFlashcards = await Flashcard.find({
+            $or: [
+                { embedding: { $exists: false } },
+                { embedding: { $size: 0 } }
+            ]
+        }).limit(LIMIT);
         let updatedCount = 0;
 
         for (const card of pendingFlashcards) {
@@ -141,7 +147,12 @@ app.post('/api/embed-pending', async (req: any, res: any) => {
 
         // Find corrections without embedding
         if (updatedCount < LIMIT) {
-            const pendingCorrections = await Correction.find({ embedding: { $exists: false } }).limit(LIMIT - updatedCount);
+            const pendingCorrections = await Correction.find({
+                $or: [
+                    { embedding: { $exists: false } },
+                    { embedding: { $size: 0 } }
+                ]
+            }).limit(LIMIT - updatedCount);
             for (const item of pendingCorrections) {
                 const vector = await getEmbedding(item.corrected);
                 if (vector) {
@@ -159,6 +170,7 @@ app.post('/api/embed-pending', async (req: any, res: any) => {
         res.status(500).json({ error: 'Embed job failed' });
     }
 });
+
 
 // 3. Get Flashcards by Scenario
 app.get('/api/flashcards/by-scenario', async (req: any, res: any) => {
@@ -277,6 +289,10 @@ app.get('/api/flashcards/struggles', async (req: any, res: any) => {
     }
 });
 
+
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+
