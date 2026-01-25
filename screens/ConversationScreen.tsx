@@ -28,11 +28,19 @@ export default function ConversationScreen() {
     const [loadingText, setLoadingText] = useState<string | null>(null);
     const [isGeneratingRecap, setIsGeneratingRecap] = useState(false);
 
+    // Scenario Mapping
+    const SCENARIO_TITLES: Record<string, string> = {
+        'cafe': 'Ordering at a Cafe',
+        'job': 'Job Interview'
+    };
+
     const {
         transcript,
         status,
         scenario,
         level,
+        targetLanguage,
+        nativeLanguage,
         setStatus,
         addMessage,
         setTranscript
@@ -46,8 +54,6 @@ export default function ConversationScreen() {
             }
         };
     }, [sound]);
-
-
 
     const { sessionId, readOnly } = useLocalSearchParams();
     const isReadOnly = readOnly === 'true';
@@ -82,7 +88,20 @@ export default function ConversationScreen() {
 
     const initSession = async () => {
         setStatus('processing');
-        const initialGreeting = "Bonjour! Bienvenue. Comment puis-je vous aider aujourd'hui?";
+        let initialGreeting = "";
+
+        if (targetLanguage === 'French') {
+            initialGreeting = "Bonjour! Bienvenue. Comment puis-je vous aider aujourd'hui?";
+        } else {
+            initialGreeting = "Hello! Welcome. How can I help you today?";
+        }
+
+        // Use LLM gen if key exists
+        const greetingData = await LLMService.generateGreeting(scenario, level, targetLanguage, nativeLanguage);
+
+        if (greetingData) {
+            initialGreeting = greetingData.text;
+        }
 
         // Generate Audio for greeting
         const audioPath = await TTSService.generateAudio(initialGreeting);
@@ -91,7 +110,9 @@ export default function ConversationScreen() {
             id: Date.now().toString(),
             role: 'assistant',
             text: initialGreeting,
-            audioUrl: audioPath || undefined
+            audioUrl: audioPath || undefined,
+            translation: greetingData?.translation,
+            suggestedResponse: greetingData?.suggestedResponse
         });
 
         if (audioPath) {
@@ -179,7 +200,7 @@ export default function ConversationScreen() {
             }
 
             // 2. LLM (Generate Response)
-            const aiResponse = await LLMService.generateResponse(userText, scenario, level);
+            const aiResponse = await LLMService.generateResponse(userText, scenario, level, targetLanguage, nativeLanguage);
 
             if (!aiResponse) {
                 setStatus('idle');
@@ -207,7 +228,10 @@ export default function ConversationScreen() {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
                 text: aiResponse.text,
-                audioUrl: audioPath || undefined
+                audioUrl: audioPath || undefined,
+                translation: aiResponse.translation,
+                // Ensure this matches the new type: { text, translation } | undefined
+                suggestedResponse: aiResponse.suggestedResponse
             });
 
             // Play Audio
@@ -227,8 +251,8 @@ export default function ConversationScreen() {
                     <ArrowLeft size={24} color={Theme.colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>Ordering at a Cafe</Text>
-                    <Text style={styles.headerSubtitle}>FRENCH • BEGINNER</Text>
+                    <Text style={styles.headerTitle}>{SCENARIO_TITLES[scenario] || 'Conversation'}</Text>
+                    <Text style={styles.headerSubtitle}>{targetLanguage.toUpperCase()} • {level.toUpperCase()}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setModalVisible(true)}>
                     <MoreVertical size={24} color={Theme.colors.text} />
@@ -238,6 +262,7 @@ export default function ConversationScreen() {
             {/* Transcript */}
             <ScrollView
                 ref={scrollViewRef}
+                style={{ flex: 1 }}
                 contentContainerStyle={styles.transcript}
                 showsVerticalScrollIndicator={false}
             >
@@ -256,6 +281,7 @@ export default function ConversationScreen() {
                             sender={msg.role}
                             text={msg.text}
                             avatar={true}
+                            translation={msg.translation}
                         />
 
                         {msg.feedback && (
@@ -280,21 +306,39 @@ export default function ConversationScreen() {
                 <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Footer Controls - Hide if Read Only */}
+            {/* Footer Controls */}
             {!isReadOnly && (
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.iconBtn}>
-                        <Lightbulb size={24} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
+                <View style={styles.footerContainer}>
+                    {/* Suggested Response */}
+                    {transcript.length > 0 && transcript[transcript.length - 1].role === 'assistant' && transcript[transcript.length - 1].suggestedResponse && (
+                        <View style={styles.suggestionContainer}>
+                            <View style={styles.suggestionLabelContainer}>
+                                <Lightbulb size={12} color="#FFF" />
+                                <Text style={styles.suggestionLabel}>Suggestion</Text>
+                            </View>
+                            <Text style={styles.suggestionText}>
+                                "{transcript[transcript.length - 1].suggestedResponse?.text}"
+                            </Text>
+                            <Text style={styles.suggestionTranslation}>
+                                {transcript[transcript.length - 1].suggestedResponse?.translation}
+                            </Text>
+                        </View>
+                    )}
 
-                    <PulseButton
-                        state={status}
-                        onPress={handleMicPress}
-                    />
+                    <View style={styles.footer}>
+                        <TouchableOpacity style={styles.iconBtn}>
+                            <Lightbulb size={24} color={Theme.colors.textSecondary} />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.iconBtn}>
-                        <Keyboard size={24} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
+                        <PulseButton
+                            state={status}
+                            onPress={handleMicPress}
+                        />
+
+                        <TouchableOpacity style={styles.iconBtn}>
+                            <Keyboard size={24} color={Theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             )}
 
@@ -351,7 +395,7 @@ export default function ConversationScreen() {
                                     id: curSessionId,
                                     date: new Date().toISOString(),
                                     scenario: scenario,
-                                    language: 'French',
+                                    language: targetLanguage,
                                     level: level,
                                     turnsCount: transcript.length,
                                     transcript: transcript,
@@ -465,8 +509,6 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     footer: {
-        position: 'absolute',
-        bottom: 40,
         width: '100%',
         flexDirection: 'row',
         justifyContent: 'space-around',
@@ -569,5 +611,45 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: Theme.colors.text,
         fontWeight: '600',
-    }
+    },
+    footerContainer: {
+        width: '100%',
+        paddingBottom: 20,
+        paddingTop: 10,
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB', // Match container bg to avoid transparency issues
+    },
+    suggestionContainer: {
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        padding: 12,
+        borderRadius: 16,
+        marginBottom: 16,
+        maxWidth: '85%',
+        alignItems: 'center',
+    },
+    suggestionLabelContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+        gap: 4,
+    },
+    suggestionLabel: {
+        color: '#FFF',
+        fontSize: 10,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
+    suggestionText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    suggestionTranslation: {
+        color: 'rgba(255, 255, 255, 0.8)',
+        fontSize: 14,
+        fontStyle: 'italic',
+        textAlign: 'center',
+        marginTop: 4,
+    },
 });

@@ -2,18 +2,30 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Theme } from '../constants/theme';
+import { useSessionStore } from '../store/useSessionStore';
 import { MessageSquare } from 'lucide-react-native';
 
 export default function SplashScreen() {
     const router = useRouter();
 
+    const { hasOnboarded } = useSessionStore();
+
     useEffect(() => {
-        // Simulate loading
+        // Build version of hydration check could be better, but this works for now
+        // since persist is sync with AsyncStorage usually needs a hydration wait but 
+        // zustand persist is often fast enough or has hydration logic.
+        // For robustness, we might want to check if hydrated.
+        // Assuming sync-like behavior for local tests, but normally async.
+
         const timer = setTimeout(() => {
-            router.replace('/start-session');
+            if (hasOnboarded) {
+                router.replace('/start-session');
+            } else {
+                router.replace('/onboarding');
+            }
         }, 2000);
         return () => clearTimeout(timer);
-    }, []);
+    }, [hasOnboarded]);
 
     return (
         <View style={styles.container}>
