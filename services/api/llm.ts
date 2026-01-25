@@ -230,7 +230,77 @@ export const LLMService = {
             console.error('LLM Greeting Error:', error);
             return null;
         }
-    }
+    },
 
+
+    translateLiveAudio: async (
+        audioUri: string,
+        primaryLang: string,
+        secondaryLang: string
+    ): Promise<{ detectedLanguage: string; translation: string; originalTranscript: string } | null> => {
+        if (!GEMINI_API_KEY) return null;
+
+        try {
+            // Read audio file as Base64.
+            // Read audio file as Base64.
+            // Using legacy API to avoid 'readAsStringAsync is deprecated' error in newer Expo SDKs
+            const FileSystem = require('expo-file-system/legacy');
+            const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
+                encoding: 'base64',
+            });
+
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+            const prompt = `
+            You are a professional interpreter.
+            You will hear audio of a person speaking.
+            The two possible languages are: "${primaryLang}" and "${secondaryLang}".
+
+            1. Detect which of these two languages is being spoken.
+            2. Transcribe the audio exactly.
+            3. Translate it into the OTHER language.
+            
+            Example:
+            - If audio is in ${primaryLang} -> Translate to ${secondaryLang}.
+            - If audio is in ${secondaryLang} -> Translate to ${primaryLang}.
+
+            Return JSON:
+            {
+                "detectedLanguage": "The detected language name",
+                "originalTranscript": "The transcription",
+                "translation": "The translation"
+            }
+            `;
+
+            const result = await model.generateContent([
+                prompt,
+                {
+                    inlineData: {
+                        mimeType: "audio/mp4", // Default for most recorders.
+                        data: base64Audio
+                    }
+                }
+            ]);
+
+            const text = result.response.text();
+            console.log("LLM Live Translation Raw:", text);
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return null;
+
+            return JSON.parse(jsonMatch[0]);
+
+        } catch (error: any) {
+            console.error('LLM Live Translation Error:', error);
+            if (error.response) {
+                console.error('LLM Error Response Data:', JSON.stringify(error.response, null, 2));
+            }
+            if (error.message && error.message.includes('404')) {
+                console.error('Model not found. Verify model name: gemini-2.5-flash');
+            }
+            return null;
+        }
+    }
 
 };
