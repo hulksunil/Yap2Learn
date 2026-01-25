@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
 import { useSessionStore } from '../store/useSessionStore';
-import { X, MessageSquare, Coffee, Briefcase, ArrowRight, MoreVertical, Plus, Trash2 } from 'lucide-react-native';
+import { X, MessageSquare, Coffee, Briefcase, ArrowRight, MoreVertical, Plus, Trash2, Languages } from 'lucide-react-native';
 
 export default function StartSessionScreen() {
     const router = useRouter();
@@ -152,7 +152,16 @@ export default function StartSessionScreen() {
 
 
                 {/* Scenario Section */}
-                <Text style={styles.sectionLabel}>Scenario</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12 }}>
+                    <Text style={[styles.sectionLabel, { marginTop: 0, marginBottom: 0 }]}>Scenario</Text>
+                    <TouchableOpacity
+                        onPress={() => router.push('/live-translation')}
+                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', padding: 8, borderRadius: 12 }}
+                    >
+                        <Languages size={16} color={Theme.colors.primary} style={{ marginRight: 4 }} />
+                        <Text style={{ color: Theme.colors.primary, fontWeight: 'bold', fontSize: 12 }}>Live Translation</Text>
+                    </TouchableOpacity>
+                </View>
 
                 {/* Cafe Card */}
                 <TouchableOpacity

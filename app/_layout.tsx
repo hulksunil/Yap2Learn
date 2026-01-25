@@ -27,6 +27,7 @@ export default function RootLayout() {
         <Stack.Screen name="session-summary" options={{ headerShown: false }} />
         <Stack.Screen name="flashcards" options={{ headerShown: false }} />
         <Stack.Screen name="history" options={{ headerShown: false }} />
+        <Stack.Screen name="live-translation" options={{ headerShown: false }} />
       </Stack >
       <StatusBar style="auto" />
     </>
