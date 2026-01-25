@@ -25,6 +25,8 @@ export interface SessionRecord {
     id: string;
     date: string; // ISO string
     scenario: string;
+    scenarioTitle?: string; // Stored human-readable title
+    scenarioRole?: string;  // Stored role
     language: string;
     nativeLanguage?: string; // Added for correct flashcard display
     level: string;
@@ -40,6 +42,8 @@ export interface FlashcardData {
     context: string; // Pronunciation / Notes
     sessionId: string;
     originalPhrase?: SavedPhrase;
+    language?: string; // Target language of this specific card
+    nativeLanguage?: string; // Native language context
 }
 
 const KEYS = {
