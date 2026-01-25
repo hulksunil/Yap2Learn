@@ -23,7 +23,9 @@ export default function FlashcardsScreen() {
     const [currentScenarioId, setCurrentScenarioId] = useState<string>('All');
     const [allScenarios, setAllScenarios] = useState<string[]>(['All']);
     const [showPicker, setShowPicker] = useState(false);
-    const [scenarioMap, setScenarioMap] = useState<Record<string, string>>({}); // sessionId -> scenarioName
+    const [scenarioMap, setScenarioMap] = useState<Record<string, string>>({}); // sessionId -> scenarioName (Title)
+    const [isSingleSessionMode, setIsSingleSessionMode] = useState(false);
+    const [singleSessionId, setSingleSessionId] = useState<string | null>(null);
 
     const [sound, setSound] = useState<Audio.Sound>();
     const [playingId, setPlayingId] = useState<string | null>(null);
@@ -46,18 +48,19 @@ export default function FlashcardsScreen() {
     );
 
     // Effect: Filter cards when Scenario or Mode changes
+    // Effect: Filter cards when Scenario or Mode changes
     React.useEffect(() => {
         if (mode === 'SCENARIO') {
-            filterCardsByScenario(currentScenarioId);
-
-            // Background: Enrich with Mongo if specific scenario selected
-            if (currentScenarioId !== 'All') {
-                fetchCloudCardsForScenario(currentScenarioId);
+            if (isSingleSessionMode && singleSessionId) {
+                // Strict filter for single session
+                setDisplayedCards(allLocalCards.filter(c => c.sessionId === singleSessionId));
+            } else {
+                filterCardsByScenario(currentScenarioId);
             }
         } else if (mode === 'STRUGGLES') {
             loadStruggles();
         }
-    }, [currentScenarioId, mode, allLocalCards]); // Re-run if local cards update (e.g. initial load)
+    }, [currentScenarioId, mode, allLocalCards]);
 
     const initializeScreen = async () => {
         // 1. Parallel Load Local Data (Blocking for minimal time)
@@ -66,23 +69,29 @@ export default function FlashcardsScreen() {
             StorageService.getFlashcards()
         ]);
 
-        // 2. Build Scenario Map (sessionId -> scenarioName)
+        // 2. Build Scenario Map (sessionId -> Title)
         const sMap: Record<string, string> = {};
         const distinctScenarios = new Set<string>();
 
         history.forEach(s => {
-            if (s.scenario) {
-                // Normalize case? For now keep strict
-                sMap[s.id] = s.scenario;
-                if (s.scenario.trim().length > 0) {
-                    distinctScenarios.add(s.scenario);
+            // Prefer Title, fallback to standard mapping, fallback to raw
+            let title = s.scenarioTitle;
+            if (!title) {
+                if (s.scenario === 'cafe') title = 'Ordering at a Cafe';
+                else if (s.scenario === 'job') title = 'Job Interview';
+                else title = s.scenario; // fallback
+            }
+
+            if (s.id) {
+                sMap[s.id] = title;
+                if (title && title.trim().length > 0) {
+                    distinctScenarios.add(title);
                 }
             }
         });
         setScenarioMap(sMap);
 
         // 3. Update Scenario List (Local First)
-        // Ensure 'All' is always first.
         const sortedScenarios = Array.from(distinctScenarios).sort();
         setAllScenarios(['All', ...sortedScenarios]);
 
@@ -91,29 +100,34 @@ export default function FlashcardsScreen() {
 
         // 5. Intelligent Default Selection
         const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+
         if (sid) {
-            // If passed a sessionId, try to switch to that scenario
-            const target = sMap[sid];
-            if (target) {
-                setCurrentScenarioId(target);
-                // Also set language from session if possible
-                const sess = history.find(s => s.id === sid);
-                if (sess) {
-                    setTargetLang(sess.language || 'French');
-                    if (sess.nativeLanguage) setNativeLang(sess.nativeLanguage);
-                }
+            // Single Session Mode
+            setIsSingleSessionMode(true);
+            setSingleSessionId(sid);
+
+            // Set context for Dropdown Label (visual only)
+            const targetTitle = sMap[sid];
+            if (targetTitle) setCurrentScenarioId(targetTitle);
+
+            // Set languages from session
+            const sess = history.find(s => s.id === sid);
+            if (sess) {
+                setTargetLang(sess.language || 'French');
+                if (sess.nativeLanguage) setNativeLang(sess.nativeLanguage);
             }
         } else if (history.length > 0) {
             // Default to most recent scenario
             const last = history[0];
-            if (last.scenario) {
-                setCurrentScenarioId(last.scenario);
+            const lastTitle = sMap[last.id];
+            if (lastTitle) {
+                setCurrentScenarioId(lastTitle);
                 setTargetLang(last.language || 'French');
             }
         }
 
         // 6. Background: Fetch Cloud Scenarios to enrich list
-        fetchCloudScenarios(distinctScenarios);
+        // fetchCloudScenarios(distinctScenarios);
     };
 
     const filterCardsByScenario = (scenario: string) => {
@@ -138,77 +152,41 @@ export default function FlashcardsScreen() {
         }
     };
 
-    const fetchCloudScenarios = async (localSet: Set<string>) => {
-        try {
-            // Lazy import to avoid cycle if any
-            import('../services/api/mongo').then(async ({ MongoService }) => {
-                const cloudList = await MongoService.getAvailableScenarios();
-                if (cloudList && cloudList.length > 0) {
-                    let changed = false;
-                    cloudList.forEach((s: string) => {
-                        if (!localSet.has(s)) {
-                            localSet.add(s);
-                            changed = true;
-                        }
-                    });
-                    if (changed) {
-                        setAllScenarios(['All', ...Array.from(localSet).sort()]);
-                    }
-                }
-            });
-        } catch (e) { /* Silent fail */ }
-    };
+    // const fetchCloudScenarios = async (localSet: Set<string>) => { ... }
+    // const fetchCloudCardsForScenario = async (scenario: string) => { ... }
 
-    const fetchCloudCardsForScenario = async (scenario: string) => {
-        try {
-            import('../services/api/mongo').then(async ({ MongoService }) => {
-                const cloudCards = await MongoService.getFlashcardsByScenario(scenario, targetLang);
-                if (cloudCards && cloudCards.length > 0) {
-                    setAllLocalCards(prev => {
-                        // Merge unique
-                        const existingIds = new Set(prev.map(c => c.id));
-                        const newItems: FlashcardData[] = [];
-                        cloudCards.forEach((c: any) => {
-                            // Use phrase as simple ID check
-                            const exists = prev.find(p => p.front === c.phrase);
-                            if (!exists && !existingIds.has(c._id)) {
-                                newItems.push({
-                                    id: c._id || c.id,
-                                    front: c.phrase,
-                                    back: c.translation,
-                                    context: c.context,
-                                    sessionId: c.sourceSessionId, // This might not map locally, which is fine
-                                });
-                            }
-                        });
-
-                        if (newItems.length > 0) {
-                            return [...prev, ...newItems];
-                        }
-                        return prev;
-                    });
-                }
-            });
-        } catch (e) { /* Silent fail */ }
-    };
-
-    const loadStruggles = () => {
+    const loadStruggles = async () => {
         setDisplayedCards([]);
         try {
-            import('../services/api/mongo').then(async ({ MongoService }) => {
-                const strugglers = await MongoService.getStruggledFlashcards(targetLang);
-                if (strugglers && strugglers.length > 0) {
-                    const mapped: FlashcardData[] = strugglers.map((s: any) => ({
-                        id: s._id || s.id,
-                        front: s.phrase,
-                        back: s.back || `${s.translation}\n\n"${s.phrase}"`,
-                        context: s.context || (s.reason ? `💡 ${s.reason}` : ''),
-                        sessionId: s.sourceSessionId
-                    }));
-                    setDisplayedCards(mapped);
+            // Use local history instead of Mongo
+            const history = await StorageService.getHistory();
+            const struggleCards: FlashcardData[] = [];
+
+            history.forEach(session => {
+                if (session.recap && session.recap.top_corrections) {
+                    session.recap.top_corrections.forEach((c: any, index: number) => {
+                        struggleCards.push({
+                            id: `struggle-${session.id}-${index}`,
+                            front: c.you_said, // Keep just the text for cleaner TTS. Context explains it's a correction.
+                            back: c.better,
+                            context: `💡 Correction for: "${c.you_said}"\n\n${c.tip}`,
+                            sessionId: session.id,
+                            language: session.language,
+                            nativeLanguage: session.nativeLanguage
+                        });
+                    });
                 }
             });
-        } catch (e) { setDisplayedCards([]); }
+
+            // Randomize or sort by date? Let's show most recent first (which history is already sorting, but we are pushing)
+            // History is ordered new -> old.
+            // Pushing in order means newest first.
+
+            setDisplayedCards(struggleCards);
+        } catch (e) {
+            console.error('Failed to load local struggles', e);
+            setDisplayedCards([]);
+        }
     };
 
     const playAudio = async (text: string, id: string) => {
@@ -278,14 +256,9 @@ export default function FlashcardsScreen() {
     const currentCard = displayedCards[currentIndex];
 
     // -- HELPER: Friendly Titles --
-    const SCENARIO_TITLES: Record<string, string> = {
-        'cafe': 'Ordering at a Cafe',
-        'job': 'Job Interview',
-        'All': 'All Scenarios'
-    };
-
+    // Now we use titles directly from the map, so this fallback is minimal
     const getDisplayTitle = (scen: string) => {
-        return SCENARIO_TITLES[scen] || scen;
+        return scen;
     };
 
     return (
@@ -316,6 +289,8 @@ export default function FlashcardsScreen() {
                                 style={[styles.pickerItem, scen === currentScenarioId && styles.pickerItemActive]}
                                 onPress={() => {
                                     setCurrentScenarioId(scen);
+                                    setIsSingleSessionMode(false); // Reset single session mode
+                                    setSingleSessionId(null);
                                     setShowPicker(false);
                                 }}
                             >
@@ -352,10 +327,19 @@ export default function FlashcardsScreen() {
                         key={currentCard.id}
                         front={currentCard.front}
                         back={currentCard.back}
-                        targetLanguage={targetLang}
-                        nativeLanguage={nativeLang}
-                        // Remove phonetic prop
-                        onPlay={() => playAudio(currentCard.front, currentCard.id)}
+                        targetLanguage={currentCard.language || targetLang}
+                        // For Struggles, the back is also Target Language (Correction), not Native.
+                        // So we pass target language as the "nativeLanguage" prop to show correct label on flip.
+                        nativeLanguage={mode === 'STRUGGLES'
+                            ? (currentCard.language || targetLang)
+                            : (currentCard.nativeLanguage || nativeLang)
+                        }
+                        hideFrontLabel={mode === 'STRUGGLES'}
+                        // Play corrected audio (back) if struggles, else front (phrase)
+                        onPlay={() => playAudio(
+                            mode === 'STRUGGLES' ? currentCard.back : currentCard.front,
+                            currentCard.id
+                        )}
                         isPlaying={playingId === currentCard.id}
                         isLoading={loadingId === currentCard.id}
                     />

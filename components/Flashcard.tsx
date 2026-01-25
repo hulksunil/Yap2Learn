@@ -11,6 +11,7 @@ interface FlashcardProps {
     isLoading?: boolean;
     targetLanguage?: string;
     nativeLanguage?: string;
+    hideFrontLabel?: boolean;
 }
 
 export const Flashcard: React.FC<FlashcardProps> = ({
@@ -20,7 +21,8 @@ export const Flashcard: React.FC<FlashcardProps> = ({
     isPlaying,
     isLoading,
     targetLanguage = 'Target',
-    nativeLanguage = 'Native'
+    nativeLanguage = 'Native',
+    hideFrontLabel = false
 }) => {
     const [flipped, setFlipped] = useState(false);
 
@@ -34,11 +36,14 @@ export const Flashcard: React.FC<FlashcardProps> = ({
             style={styles.card}
         >
             <View style={styles.header}>
-                <View style={[styles.tag, { backgroundColor: flipped ? '#F3F4F6' : '#EFF6FF' }]}>
-                    <Text style={[styles.tagText, { color: flipped ? Theme.colors.textSecondary : Theme.colors.primary }]}>
-                        {flipped ? nativeLanguage : targetLanguage}
-                    </Text>
-                </View>
+                {(!hideFrontLabel || flipped) && (
+                    <View style={[styles.tag, { backgroundColor: flipped ? '#F3F4F6' : '#EFF6FF' }]}>
+                        <Text style={[styles.tagText, { color: flipped ? Theme.colors.textSecondary : Theme.colors.primary }]}>
+                            {flipped ? nativeLanguage : targetLanguage}
+                        </Text>
+                    </View>
+                )}
+                {(hideFrontLabel && !flipped) && <View />}
                 {!flipped && onPlay && (
                     <TouchableOpacity
                         style={styles.audioBtn}

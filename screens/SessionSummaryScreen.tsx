@@ -8,7 +8,6 @@ import { StorageService } from '../services/storage';
 import { SavedPhraseCard, CorrectionCard } from '../components/SummaryComponents';
 import { TTSService } from '../services/api/tts';
 import { Audio } from 'expo-av';
-import { MongoService } from '../services/api/mongo';
 
 export default function SessionSummaryScreen() {
     const router = useRouter();
@@ -32,21 +31,13 @@ export default function SessionSummaryScreen() {
                 sound.unloadAsync();
             }
         };
-    }, [sessionId]); // Re-run if session changes (unlikely) but safe. 
-    // Ideally cleanup sound on unmount or sound change.
+    }, [sessionId]);
 
     useEffect(() => {
         return () => {
             if (sound) sound.unloadAsync();
         };
     }, [sound]);
-
-    // Trigger Sync when session is loaded
-    useEffect(() => {
-        if (session && session.id) {
-            MongoService.syncSession(session.id);
-        }
-    }, [session]);
 
     const loadSession = async () => {
         const history = await StorageService.getHistory();
@@ -131,7 +122,7 @@ export default function SessionSummaryScreen() {
                     <View style={styles.tag}>
                         <Text style={styles.tagText}>CONVERSATION</Text>
                     </View>
-                    <Text style={styles.title}>{scenario}</Text>
+                    <Text style={styles.title}>{session.scenarioTitle || session.scenario}</Text>
                     <Text style={styles.subtitle}>{level} • {language}</Text>
                 </View>
 

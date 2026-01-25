@@ -100,21 +100,7 @@ export default function SettingsScreen() {
                     <Text style={styles.infoTextSub}>Designed for Hackathon Project.</Text>
                 </View>
 
-                {/* Cloud Sync Section */}
-                <Text style={styles.sectionHeader}>Cloud Sync</Text>
-                <TouchableOpacity
-                    style={styles.syncBtn}
-                    onPress={async () => {
-                        const { MongoService } = await import('../services/api/mongo');
-                        alert('Starting sync... please wait.');
-                        const count = await MongoService.syncHistory();
-                        alert(`Sync Complete! Uploaded ${count} sessions.`);
-                    }}
-                >
-                    <Save size={20} color="#FFF" />
-                    <Text style={styles.syncBtnText}>Sync History to Cloud</Text>
-                </TouchableOpacity>
-                <Text style={styles.helperText}>Uploads your past sessions to enable Semantic Flashcards.</Text>
+
 
             </ScrollView>
         </SafeAreaView>

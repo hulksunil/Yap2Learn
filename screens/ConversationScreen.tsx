@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIn
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
-import { ArrowLeft, MoreVertical, Keyboard, Lightbulb, AudioWaveform as Waveform, X, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Keyboard, Lightbulb, AudioWaveform as Waveform, X, Volume2, Gauge } from 'lucide-react-native';
 import { ChatBubble } from '../components/ChatBubble';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { PulseButton } from '../components/PulseButton';
@@ -27,6 +27,7 @@ export default function ConversationScreen() {
     const [playingText, setPlayingText] = useState<string | null>(null);
     const [loadingText, setLoadingText] = useState<string | null>(null);
     const [isGeneratingRecap, setIsGeneratingRecap] = useState(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
 
 
@@ -163,6 +164,10 @@ export default function ConversationScreen() {
             await sound.unloadAsync();
         }
         const { sound: newSound } = await Audio.Sound.createAsync({ uri });
+        // Set Speed
+        if (playbackSpeed !== 1.0) {
+            await newSound.setRateAsync(playbackSpeed, true);
+        }
         setSound(newSound);
         await newSound.playAsync();
     };
@@ -187,6 +192,11 @@ export default function ConversationScreen() {
             const uri = await TTSService.generateAudio(text);
             if (uri) {
                 const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+                // Set Speed
+                if (playbackSpeed !== 1.0) {
+                    await newSound.setRateAsync(playbackSpeed, true);
+                }
+
                 newSound.setOnPlaybackStatusUpdate((status) => {
                     if (status.isLoaded && status.didJustFinish) {
                         setPlayingText(null);
@@ -393,8 +403,31 @@ export default function ConversationScreen() {
                                 onPress={handleMicPress}
                             />
 
-                            <TouchableOpacity style={styles.iconBtn}>
-                                <Keyboard size={24} color={Theme.colors.textSecondary} />
+                            <TouchableOpacity
+                                style={styles.iconBtn}
+                                onPress={() => {
+                                    // Toggle Speed: 1.0 -> 0.75 -> 0.5 -> 1.0
+                                    if (playbackSpeed === 1.0) setPlaybackSpeed(0.75);
+                                    else if (playbackSpeed === 0.75) setPlaybackSpeed(0.5);
+                                    else setPlaybackSpeed(1.0);
+                                }}
+                            >
+                                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                    <Gauge size={24} color={Theme.colors.textSecondary} />
+                                    <View style={{
+                                        position: 'absolute',
+                                        backgroundColor: Theme.colors.primary,
+                                        borderRadius: 8,
+                                        paddingHorizontal: 3,
+                                        paddingVertical: 1,
+                                        bottom: -6,
+                                        right: -6
+                                    }}>
+                                        <Text style={{ color: '#FFF', fontSize: 8, fontWeight: 'bold' }}>
+                                            {playbackSpeed}x
+                                        </Text>
+                                    </View>
+                                </View>
                             </TouchableOpacity>
                         </View>
                     </>
@@ -459,7 +492,9 @@ export default function ConversationScreen() {
                                     level: level,
                                     turnsCount: transcript.length,
                                     transcript: transcript,
-                                    recap: finalRecap
+                                    recap: finalRecap,
+                                    scenarioTitle: scenarioTitle, // Add Title
+                                    scenarioRole: scenarioRole   // Add Role
                                 });
 
                                 // 3. Save Flashcards (Scoped to Session from Recap)

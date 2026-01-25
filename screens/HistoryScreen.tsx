@@ -50,14 +50,16 @@ export default function HistoryScreen() {
                                 params: { sessionId: item.id, readOnly: 'true' }
                             })}
                         >
-                            <View style={styles.iconContainer}>
-                                {item.scenario === 'cafe' ?
-                                    <MessageSquare size={24} color={Theme.colors.primary} /> :
-                                    <Briefcase size={24} color="#EA580C" />
+                            <View style={[styles.iconContainer, item.scenario === 'job' && { backgroundColor: '#FFEDD5' }]}>
+                                {item.scenario === 'job' ?
+                                    <Briefcase size={24} color="#EA580C" /> :
+                                    <MessageSquare size={24} color={Theme.colors.primary} />
                                 }
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.scenarioTitle}>{item.scenario === 'cafe' ? 'Ordering at a Cafe' : 'Job Interview'}</Text>
+                                <Text style={styles.scenarioTitle}>
+                                    {item.scenarioTitle || (item.scenario === 'job' ? 'Job Interview' : (item.scenario === 'cafe' ? 'Ordering at a Cafe' : 'Conversation'))}
+                                </Text>
                                 <View style={styles.metaRow}>
                                     <Clock size={12} color={Theme.colors.textSecondary} style={{ marginRight: 4 }} />
                                     <Text style={styles.dateText}>{formatDate(item.date)}</Text>
