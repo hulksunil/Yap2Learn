@@ -311,7 +311,7 @@ export default function ConversationScreen() {
                 contentContainerStyle={styles.transcript}
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={styles.timestamp}>Today 9:41 AM</Text>
+                <Text style={styles.timestamp}>Today {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
 
                 {transcript.map((msg) => (
                     <View key={msg.id}>
