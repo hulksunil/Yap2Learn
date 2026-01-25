@@ -7,7 +7,7 @@ from elevenlabs.play import play
 from elevenlabs.types import VoiceSettings
 import os
 
-load_dotenv("keys.env")
+load_dotenv(".env")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 VOICE_ID = os.getenv("VOICE_ID")
 
