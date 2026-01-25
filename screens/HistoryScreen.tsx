@@ -42,7 +42,14 @@ export default function HistoryScreen() {
                     <Text style={styles.emptyText}>No sessions yet. Start yapping!</Text>
                 ) : (
                     history.map((item) => (
-                        <TouchableOpacity key={item.id} style={styles.card}>
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.card}
+                            onPress={() => router.push({
+                                pathname: '/conversation',
+                                params: { sessionId: item.id, readOnly: 'true' }
+                            })}
+                        >
                             <View style={styles.iconContainer}>
                                 {item.scenario === 'cafe' ?
                                     <MessageSquare size={24} color={Theme.colors.primary} /> :

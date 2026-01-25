@@ -38,6 +38,7 @@ interface SessionState {
     completeOnboarding: () => void;
     setSessionConfig: (level: string, scenario: string) => void;
     addMessage: (msg: Message) => void;
+    setTranscript: (messages: Message[]) => void;
     setStatus: (status: SessionState['status']) => void;
     resetSession: () => void;
 
@@ -71,6 +72,9 @@ export const useSessionStore = create<SessionState>()(
                 transcript: [...state.transcript, msg]
             })),
 
+    setTranscript: (messages) => set({ transcript: messages }),
+
+    setStatus: (status) => set({ status }),
             setStatus: (status) => set({ status }),
 
             resetSession: () => set({

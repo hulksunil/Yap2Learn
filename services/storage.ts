@@ -1,5 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export interface Correction {
+    you_said: string;
+    better: string;
+    tip: string;
+    category: 'grammar' | 'vocab' | 'register' | 'pronunciation_guess' | 'word_choice' | 'fluency';
+}
+
+export interface SavedPhrase {
+    phrase: string;
+    translation: string;
+    example_sentence: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    pronunciation_hint?: string;
+}
+
+export interface SessionRecap {
+    saved_phrases: SavedPhrase[];
+    top_corrections: Correction[];
+    suggestions: string[];
+}
+
 export interface SessionRecord {
     id: string;
     date: string; // ISO string
@@ -7,15 +28,17 @@ export interface SessionRecord {
     language: string;
     level: string;
     turnsCount: number;
+    transcript: any[]; // Full message history
+    recap?: SessionRecap; // Consolidated recap
 }
 
 export interface FlashcardData {
     id: string;
-    front: string; // Original (Wrong)
-    back: string;  // Improved (Right)
-    context: string; // Explanation
-    phonetic?: string;
+    front: string; // Phrase
+    back: string;  // Translation + Example
+    context: string; // Pronunciation / Notes
     sessionId: string;
+    originalPhrase?: SavedPhrase;
 }
 
 const KEYS = {
@@ -56,10 +79,15 @@ export const StorageService = {
         }
     },
 
-    getFlashcards: async (): Promise<FlashcardData[]> => {
+    getFlashcards: async (sessionId?: string): Promise<FlashcardData[]> => {
         try {
             const json = await AsyncStorage.getItem(KEYS.FLASHCARDS);
-            return json ? JSON.parse(json) : [];
+            const allCards: FlashcardData[] = json ? JSON.parse(json) : [];
+
+            if (sessionId) {
+                return allCards.filter(c => c.sessionId === sessionId);
+            }
+            return allCards;
         } catch (e) {
             console.error('Failed to get flashcards', e);
             return [];

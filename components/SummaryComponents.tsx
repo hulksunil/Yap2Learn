@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Volume2, X, Check } from 'lucide-react-native';
 import { Theme } from '../constants/theme';
 
@@ -23,9 +23,12 @@ export const SavedPhraseCard: React.FC<SavedPhraseProps> = ({ french, english })
 interface CorrectionCardProps {
     wrong: string;
     right: string;
+    onPlay?: () => void;
+    isPlaying?: boolean;
+    isLoading?: boolean;
 }
 
-export const CorrectionCard: React.FC<CorrectionCardProps> = ({ wrong, right }) => (
+export const CorrectionCard: React.FC<CorrectionCardProps> = ({ wrong, right, onPlay, isPlaying, isLoading }) => (
     <View style={[styles.card, styles.correctionCard]}>
         {/* Wrong Part */}
         <View style={styles.correctionRow}>
@@ -43,8 +46,17 @@ export const CorrectionCard: React.FC<CorrectionCardProps> = ({ wrong, right }) 
                 <Text style={[styles.label, { color: Theme.colors.success }]}>BETTER</Text>
                 <Text style={styles.rightText}>"{right}"</Text>
             </View>
-            <TouchableOpacity>
-                <Volume2 size={16} color={Theme.colors.success} />
+            <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={onPlay}
+                disabled={isLoading || isPlaying}
+                style={{ padding: 4 }}
+            >
+                {isLoading ? (
+                    <ActivityIndicator size="small" color={Theme.colors.success} />
+                ) : (
+                    <Volume2 size={16} color={isPlaying ? Theme.colors.primary : Theme.colors.success} />
+                )}
             </TouchableOpacity>
         </View>
     </View>

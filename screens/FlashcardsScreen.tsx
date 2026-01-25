@@ -1,35 +1,101 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
 import { ArrowLeft, ArrowRight, Home } from 'lucide-react-native';
 import { Flashcard } from '../components/Flashcard';
 import { StorageService, FlashcardData } from '../services/storage';
+import { TTSService } from '../services/api/tts';
+import { Audio } from 'expo-av';
 
 export default function FlashcardsScreen() {
     const router = useRouter();
+    // Get sessionId from params if passed (e.g. from summary)
+    // Note: expo-router useLocalSearchParams might return string | string[]
+    const { sessionId } = useLocalSearchParams();
+
     const [cards, setCards] = useState<FlashcardData[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
+
+    const [sound, setSound] = useState<Audio.Sound>();
+    const [playingId, setPlayingId] = useState<string | null>(null);
+    const [loadingId, setLoadingId] = useState<string | null>(null);
 
     useFocusEffect(
         React.useCallback(() => {
             loadCards();
+            return () => {
+                if (sound) sound.unloadAsync();
+            };
         }, [])
     );
 
     const loadCards = async () => {
-        const data = await StorageService.getFlashcards();
+        const sid = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+        const data = await StorageService.getFlashcards(sid);
         setCards(data);
     };
 
+    const playAudio = async (text: string, id: string) => {
+        if (loadingId) return; // Prevent double load
+        if (playingId === id && sound) {
+            // Already playing this one? Maybe stop?
+            // Simple logic: Stop current if playing
+            await sound.stopAsync();
+            setPlayingId(null);
+            return;
+        }
+
+        // Stop any previous
+        if (sound) {
+            await sound.unloadAsync();
+            setSound(undefined);
+            setPlayingId(null);
+        }
+
+        try {
+            setLoadingId(id);
+            const uri = await TTSService.generateAudio(text);
+            if (uri) {
+                const { sound: newSound } = await Audio.Sound.createAsync(
+                    { uri },
+                    { shouldPlay: true }
+                );
+
+                newSound.setOnPlaybackStatusUpdate((status) => {
+                    if (status.isLoaded && status.didJustFinish) {
+                        setPlayingId(null);
+                        setSound(undefined);
+                    }
+                });
+
+                setSound(newSound);
+                setPlayingId(id);
+            }
+        } catch (error) {
+            console.log('Error playing flashcard audio:', error);
+        } finally {
+            setLoadingId(null);
+        }
+    };
+
     const handleNext = () => {
+        // Stop audio when changing cards
+        if (sound) {
+            sound.stopAsync();
+            setPlayingId(null);
+        }
         if (currentIndex < cards.length - 1) {
             setCurrentIndex(currentIndex + 1);
         }
     };
 
     const handlePrev = () => {
+        if (sound) {
+            sound.stopAsync();
+            setPlayingId(null);
+        }
         if (currentIndex > 0) {
             setCurrentIndex(currentIndex - 1);
         }
@@ -54,7 +120,10 @@ export default function FlashcardsScreen() {
                         key={currentCard.id}
                         front={currentCard.front}
                         back={currentCard.back}
-                        phonetic={currentCard.context} // Using context as phonetic logic/explanation for now
+                        // Remove phonetic prop
+                        onPlay={() => playAudio(currentCard.front, currentCard.id)}
+                        isPlaying={playingId === currentCard.id}
+                        isLoading={loadingId === currentCard.id}
                     />
                 ) : (
                     <Text style={styles.emptyText}>No flashcards saved yet.</Text>

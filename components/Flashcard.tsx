@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Volume2, RotateCw } from 'lucide-react-native';
 import { Theme } from '../constants/theme';
 
 interface FlashcardProps {
     front: string;
     back: string;
-    phonetic?: string;
+    onPlay?: () => void;
+    isPlaying?: boolean;
+    isLoading?: boolean;
 }
 
-export const Flashcard: React.FC<FlashcardProps> = ({ front, back, phonetic }) => {
+export const Flashcard: React.FC<FlashcardProps> = ({ front, back, onPlay, isPlaying, isLoading }) => {
     const [flipped, setFlipped] = useState(false);
+
+    // Legacy support: strip example sentence if present (delimited by \n\n)
+    const cleanBack = back.includes('\n\n') ? back.split('\n\n')[0] : back;
 
     return (
         <TouchableOpacity
@@ -20,16 +25,25 @@ export const Flashcard: React.FC<FlashcardProps> = ({ front, back, phonetic }) =
         >
             <View style={styles.header}>
                 <View style={styles.tag}>
-                    <Text style={styles.tagText}>French - Level 1</Text>
+                    <Text style={styles.tagText}>French</Text>
                 </View>
-                <TouchableOpacity style={styles.audioBtn}>
-                    <Volume2 size={20} color={Theme.colors.primary} />
-                </TouchableOpacity>
+                {!flipped && onPlay && (
+                    <TouchableOpacity
+                        style={styles.audioBtn}
+                        onPress={onPlay}
+                        disabled={isLoading || isPlaying}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={Theme.colors.primary} />
+                        ) : (
+                            <Volume2 size={24} color={isPlaying ? Theme.colors.secondary : Theme.colors.primary} />
+                        )}
+                    </TouchableOpacity>
+                )}
             </View>
 
             <View style={styles.content}>
-                <Text style={styles.mainText}>{flipped ? back : front}</Text>
-                {phonetic && !flipped && <Text style={styles.subText}>({phonetic})</Text>}
+                <Text style={styles.mainText}>{flipped ? cleanBack : front}</Text>
             </View>
 
             <View style={styles.footer}>
@@ -58,6 +72,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
+        height: 40,
     },
     tag: {
         backgroundColor: '#EFF6FF',
@@ -79,18 +94,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         flex: 1,
+        paddingHorizontal: 10,
     },
     mainText: {
-        fontSize: 40,
+        fontSize: 32,
         fontWeight: 'bold',
         color: Theme.colors.text,
         textAlign: 'center',
         marginBottom: 8,
-    },
-    subText: {
-        fontSize: 18,
-        color: Theme.colors.textSecondary,
-        fontWeight: '400',
     },
     footer: {
         flexDirection: 'row',

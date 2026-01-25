@@ -1,16 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { CheckCircle, Lightbulb, RotateCcw } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { CheckCircle, Lightbulb, RotateCcw, Volume2 } from 'lucide-react-native';
 import { Theme } from '../constants/theme';
 
 interface FeedbackCardProps {
     original: string;
     improved: string;
     explanation: string;
-    onRetry?: () => void;
+    onPlay?: () => void;
+    isPlaying?: boolean;
+    isLoading?: boolean;
 }
 
-export const FeedbackCard: React.FC<FeedbackCardProps> = ({ original, improved, explanation, onRetry }) => {
+export const FeedbackCard: React.FC<FeedbackCardProps> = ({ original, improved, explanation, onPlay, isPlaying, isLoading }) => {
     return (
         <View style={styles.container}>
             <View style={styles.section}>
@@ -19,6 +20,19 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({ original, improved, 
                     <Text style={styles.label}>BETTER WAY</Text>
                     <Text style={styles.improvedText}>{improved}</Text>
                 </View>
+                {onPlay && (
+                    <TouchableOpacity
+                        style={styles.audioBtn}
+                        onPress={onPlay}
+                        disabled={isLoading || isPlaying}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={Theme.colors.secondary} />
+                        ) : (
+                            <Volume2 size={20} color={isPlaying ? Theme.colors.primary : Theme.colors.secondary} />
+                        )}
+                    </TouchableOpacity>
+                )}
             </View>
 
             <View style={styles.divider} />
@@ -29,13 +43,6 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({ original, improved, 
                     <Text style={styles.explanationText}>{explanation}</Text>
                 </View>
             </View>
-
-            {onRetry && (
-                <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-                    <RotateCcw size={16} color={Theme.colors.primary} />
-                    <Text style={styles.retryText}>Try again</Text>
-                </TouchableOpacity>
-            )}
         </View>
     );
 };
@@ -92,4 +99,10 @@ const styles = StyleSheet.create({
         marginLeft: 6,
         fontSize: 14,
     },
+    audioBtn: {
+        marginLeft: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 4,
+    }
 });
