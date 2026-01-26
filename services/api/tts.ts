@@ -1,8 +1,8 @@
+import { Platform } from 'react-native';
 import axios from 'axios';
 import { Buffer } from 'buffer';
 
-// @ts-ignore: Temporary fix for Expo FileSystem types
-const FileSystem = require('expo-file-system/legacy');
+import * as FileSystem from 'expo-file-system';
 
 const ELEVENLABS_API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
 // User configurable Voice ID, defaults to a standard one if not set
@@ -36,10 +36,15 @@ export const TTSService = {
                 }
             );
 
-            // Save to temporary file
-            const path = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
             // Convert ArrayBuffer to Base64
             const base64 = Buffer.from(response.data, 'binary').toString('base64');
+
+            if (Platform.OS === 'web') {
+                return `data:audio/mp3;base64,${base64}`;
+            }
+
+            // Save to temporary file
+            const path = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
 
             await FileSystem.writeAsStringAsync(path, base64, {
                 encoding: 'base64',

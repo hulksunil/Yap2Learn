@@ -1,4 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
@@ -242,12 +244,28 @@ export const LLMService = {
 
         try {
             // Read audio file as Base64.
-            // Read audio file as Base64.
-            // Using legacy API to avoid 'readAsStringAsync is deprecated' error in newer Expo SDKs
-            const FileSystem = require('expo-file-system/legacy');
-            const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
-                encoding: 'base64',
-            });
+            let base64Audio = '';
+
+            if (Platform.OS === 'web') {
+                const response = await fetch(audioUri);
+                const blob = await response.blob();
+
+                base64Audio = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const dataUrl = reader.result as string;
+                        // Remove "data:audio/webm;base64," or similar prefix
+                        const base64 = dataUrl.split(',')[1];
+                        resolve(base64);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } else {
+                base64Audio = await FileSystem.readAsStringAsync(audioUri, {
+                    encoding: 'base64',
+                });
+            }
 
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });

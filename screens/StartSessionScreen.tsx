@@ -257,7 +257,7 @@ export default function StartSessionScreen() {
                 visible={customModalVisible}
                 onRequestClose={() => setCustomModalVisible(false)}
             >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <TouchableWithoutFeedback onPress={Platform.OS === 'web' ? undefined : Keyboard.dismiss}>
                     <KeyboardAvoidingView
                         behavior={Platform.OS === "ios" ? "padding" : "height"}
                         style={styles.modalOverlay}

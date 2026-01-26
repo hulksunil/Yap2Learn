@@ -2,6 +2,7 @@
   "expo": {
     "name": "Yap2Learn",
     "slug": "Yap2Learn",
+    "scheme": "yap2learn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +14,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.Yap2Learn"
     },
     "android": {
       "adaptiveIcon": {
