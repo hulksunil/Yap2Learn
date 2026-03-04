@@ -1,5 +1,8 @@
 # Yap2Learn
 
+## Demo Video
+[View our Demo Video!](https://www.youtube.com/watch?v=iOTvvSNXlDg)
+
 ## Semantic Flashcards (MongoDB Atlas + Vector Search)
 
 This project now includes a "Semantic Flashcards" feature powered by MongoDB Atlas. It runs a local Express server alongside the Expo app to handle data synchronization and vector search.
